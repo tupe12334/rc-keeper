@@ -63,3 +63,4 @@ New crates (one owner each):
 - Allowed values: permissionMode ∈ `acceptEdits|auto|bypassPermissions|default|dontAsk|plan`; spawn ∈ `same-dir|worktree|session` (from `claude remote-control --help`, v2.1.316).
 - CLI daemon group: `rc-keeper daemon` / `daemon run` (foreground), `daemon stop` (IPC `shutdown`; exit 0 also when not running), `daemon status [--json]` (exit 0 running, 2 not running).
 - Every crate `Cargo.toml` and `src-tauri/Cargo.toml` uses a literal `version = "x.y.z"` (no `version.workspace`), so release-please can bump it.
+- Service restart semantics: the OS service restarts the daemon only on failure (systemd `Restart=on-failure`, launchd `KeepAlive.SuccessfulExit=false`), so `rc-keeper daemon stop` stays stopped. Socket: config dir 0700, socket 0600.
