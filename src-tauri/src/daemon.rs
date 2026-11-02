@@ -66,3 +66,32 @@ fn spawn_sidecar() -> Result<(), String> {
         .map(|_| ())
         .map_err(|e| format!("failed to start {}: {e}", sidecar.display()))
 }
+
+/// Asks a running daemon to shut down. Does nothing when no daemon answers, and never spawns one.
+pub fn stop(daemon: &Daemon) -> Result<(), String> {
+    let mut slot = daemon
+        .0
+        .lock()
+        .map_err(|_| "daemon lock poisoned".to_string())?;
+    *slot = None;
+    if let Some(mut client) = try_ping() {
+        client
+            .call("shutdown", json!({}))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Version and reachability of the daemon. Never spawns one.
+pub fn info() -> Value {
+    match try_ping() {
+        Some(mut client) => {
+            let version = client
+                .call("ping", json!({}))
+                .ok()
+                .and_then(|v| v["version"].as_str().map(String::from));
+            json!({ "version": version.unwrap_or_default(), "running": true })
+        }
+        None => json!({ "version": "", "running": false }),
+    }
+}

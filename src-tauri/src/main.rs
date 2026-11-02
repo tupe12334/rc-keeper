@@ -53,6 +53,8 @@ fn main() {
             commands::get_settings,
             commands::set_settings,
             commands::detect_claude_bin,
+            commands::daemon_info,
+            commands::stop_daemon,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run rc-keeper");

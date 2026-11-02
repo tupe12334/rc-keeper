@@ -84,3 +84,13 @@ pub fn set_settings(
 pub fn detect_claude_bin(daemon: State<'_, Daemon>) -> CmdResult {
     daemon::call(&daemon, "detect_claude_bin", json!({}))
 }
+
+#[tauri::command]
+pub fn daemon_info() -> Value {
+    daemon::info()
+}
+
+#[tauri::command]
+pub fn stop_daemon(daemon: State<'_, Daemon>) -> Result<(), String> {
+    daemon::stop(&daemon)
+}

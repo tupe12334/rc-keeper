@@ -55,7 +55,7 @@ fn on_menu(app: &AppHandle, id: &str) {
             let _ = daemon::call(&daemon, "stop_all", json!({}));
         }
         "stop_daemon" => {
-            let _ = daemon::call(&daemon, "shutdown", json!({}));
+            let _ = daemon::stop(&daemon);
         }
         // Quitting the GUI leaves the daemon running.
         "quit" => app.exit(0),
