@@ -203,5 +203,7 @@ fn start_force_needs_consent_then_takes_the_folder() {
             .then_some(())
     });
 
+    // Stop the daemon while its config dir still exists: the socket name is derived from it.
+    drop(guard);
     let _ = std::fs::remove_dir_all(&root);
 }
