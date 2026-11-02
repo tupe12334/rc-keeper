@@ -37,6 +37,23 @@ jobs:
           { gh release view "$TAG" --json body --jq .body; echo; cat "$RUNNER_TEMP/generated.md"; } > "$RUNNER_TEMP/notes.md"
           gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
 
+      # release-please bumps the Cargo.toml versions but not the lockfiles, and CI builds with
+      # --locked. Resync both lockfiles on the release PR branch so its builds pass.
+      - uses: actions/checkout@v4
+        if: steps.release.outputs.pr
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+      - name: Sync Cargo.lock files with the bumped versions
+        if: steps.release.outputs.pr
+        run: |
+          cargo metadata --format-version 1 >/dev/null
+          cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 >/dev/null
+          if git diff --quiet -- Cargo.lock src-tauri/Cargo.lock; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: sync Cargo.lock with release versions" -- Cargo.lock src-tauri/Cargo.lock
+          git push
+
   build:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
