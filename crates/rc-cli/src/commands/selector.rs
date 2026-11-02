@@ -7,9 +7,8 @@ use rc_core::InstanceView;
 
 /// Canonical absolute path. Errors when the folder does not exist.
 pub fn canonical(path: &Path) -> Result<PathBuf> {
-    let p = std::fs::canonicalize(path)
-        .with_context(|| format!("no such folder: {}", path.display()))?;
-    Ok(strip_verbatim(p))
+    // dunce drops the Windows `\\?\` prefix only when the plain form means the same path.
+    dunce::canonicalize(path).with_context(|| format!("no such folder: {}", path.display()))
 }
 
 /// Canonical path when the folder exists. Otherwise an absolute path with `.` and `..` resolved
@@ -19,8 +18,7 @@ pub fn resolve(path: &Path) -> PathBuf {
 }
 
 fn lexical(path: &Path) -> PathBuf {
-    let abs = std::path::absolute(strip_verbatim(path.to_path_buf()))
-        .unwrap_or_else(|_| path.to_path_buf());
+    let abs = std::path::absolute(dunce::simplified(path)).unwrap_or_else(|_| path.to_path_buf());
     abs.components().fold(PathBuf::new(), |mut out, c| {
         match c {
             Component::CurDir => {}
@@ -57,36 +55,6 @@ pub fn select(
         1 => Ok(hits.remove(0)),
         n => bail!("`{selector}` matches {n} instances; use the id"),
     }
-}
-
-#[cfg(windows)]
-fn strip_verbatim(p: PathBuf) -> PathBuf {
-    // `\\?\UNC\server\share` is the network form of `\\server\share`.
-    if let Some(unc) = p.to_str().and_then(|s| s.strip_prefix(r"\\?\UNC\")) {
-        return PathBuf::from(format!(r"\\{unc}"));
-    }
-    match p.to_str().and_then(|s| s.strip_prefix(r"\\?\")) {
-        Some(s) => PathBuf::from(s),
-        None => p,
-    }
-}
-
-#[cfg(not(windows))]
-fn strip_verbatim(p: PathBuf) -> PathBuf {
-    p
-}
-
-#[cfg(windows)]
-#[test]
-fn verbatim_prefixes_are_stripped() {
-    assert_eq!(
-        strip_verbatim(PathBuf::from(r"\\?\UNC\server\share\x")),
-        PathBuf::from(r"\\server\share\x")
-    );
-    assert_eq!(
-        strip_verbatim(PathBuf::from(r"\\?\C:\x")),
-        PathBuf::from(r"C:\x")
-    );
 }
 
 #[cfg(test)]
