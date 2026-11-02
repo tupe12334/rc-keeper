@@ -727,6 +727,7 @@ dependencies = [
  "rc-ipc",
  "serde",
  "serde_json",
+ "windows-sys",
 ]
 
 [[package]]
