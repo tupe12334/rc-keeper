@@ -259,7 +259,7 @@ jobs:
           APPIMAGE=$(find "$DL" -name '*.AppImage' | head -n 1)
           if [ -z "$APPIMAGE" ]; then echo "error: no .AppImage under $DL" >&2; ls -R "$DL" >&2; exit 1; fi
           sudo apt-get update
-          sudo apt-get install -y xvfb
+          sudo apt-get install -y xvfb libegl1 libgl1
           cp "$APPIMAGE" "$RUNNER_TEMP/rc-keeper.AppImage"
           chmod +x "$RUNNER_TEMP/rc-keeper.AppImage"
 
