@@ -1,0 +1,332 @@
+name: Build and smoke
+
+# Reusable. Builds the CLI and the Tauri GUI bundles, then smoke-tests them.
+# publish: true uploads to an existing release (tag required).
+# publish: false keeps the bundles as workflow artifacts. Nothing is released.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Existing release tag to upload to. Required when publish is true.
+        required: false
+        type: string
+        default: ""
+      publish:
+        description: Upload to the release (true) or keep workflow artifacts only (false)
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS universal
+            os: macos-latest
+            args: --target universal-apple-darwin
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
+            cli_triples: aarch64-apple-darwin x86_64-apple-darwin
+            cli_bin: src-tauri/binaries/rc-keeper-universal-apple-darwin
+            cli_archive: rc-keeper-universal-apple-darwin.tar.gz
+            cli_inner: rc-keeper
+          - name: Linux x64
+            os: ubuntu-22.04
+            args: ""
+            targets: ""
+            cli_triples: x86_64-unknown-linux-gnu
+            cli_bin: src-tauri/binaries/rc-keeper-x86_64-unknown-linux-gnu
+            cli_archive: rc-keeper-x86_64-unknown-linux-gnu.tar.gz
+            cli_inner: rc-keeper
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            args: ""
+            targets: ""
+            cli_triples: aarch64-unknown-linux-gnu
+            cli_bin: src-tauri/binaries/rc-keeper-aarch64-unknown-linux-gnu
+            cli_archive: rc-keeper-aarch64-unknown-linux-gnu.tar.gz
+            cli_inner: rc-keeper
+          - name: Windows
+            os: windows-latest
+            args: ""
+            targets: ""
+            cli_triples: x86_64-pc-windows-msvc
+            cli_bin: src-tauri/binaries/rc-keeper-x86_64-pc-windows-msvc.exe
+            cli_archive: rc-keeper-x86_64-pc-windows-msvc.zip
+            cli_inner: rc-keeper.exe
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ inputs.tag }}
+      CLI_TRIPLES: ${{ matrix.cli_triples }}
+      CLI_BIN: ${{ matrix.cli_bin }}
+      CLI_ARCHIVE: ${{ matrix.cli_archive }}
+      CLI_INNER: ${{ matrix.cli_inner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri Linux dependencies
+        if: startsWith(matrix.os, 'ubuntu')
+        uses: ./.github/actions/linux-deps
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      # pnpm version comes from the packageManager field in ui/package.json.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+
+      - name: Install UI dependencies
+        run: pnpm -C ui install --frozen-lockfile
+
+      - name: Build UI
+        run: pnpm -C ui build
+
+      # Build the CLI for each triple. Copy each one to the Tauri sidecar name.
+      - name: Build CLI sidecars
+        run: |
+          set -eu
+          mkdir -p src-tauri/binaries
+          for T in $CLI_TRIPLES; do
+            cargo build -p rc-cli --release --locked --target "$T"
+            EXT=""
+            case "$T" in *windows*) EXT=.exe ;; esac
+            cp "target/$T/release/rc-keeper$EXT" "src-tauri/binaries/rc-keeper-$T$EXT"
+          done
+
+      - name: Lipo universal CLI (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          lipo -create -output src-tauri/binaries/rc-keeper-universal-apple-darwin \
+            src-tauri/binaries/rc-keeper-aarch64-apple-darwin \
+            src-tauri/binaries/rc-keeper-x86_64-apple-darwin
+
+      - name: Package CLI archive
+        run: |
+          set -eu
+          STAGE="$RUNNER_TEMP/stage"
+          rm -rf "$STAGE" && mkdir -p "$STAGE"
+          cp "$CLI_BIN" "$STAGE/$CLI_INNER"
+          case "$CLI_ARCHIVE" in
+            *.zip)
+              powershell -NoProfile -Command "Compress-Archive -Path '$(cygpath -w "$STAGE/$CLI_INNER")' -DestinationPath '$CLI_ARCHIVE' -Force"
+              ;;
+            *)
+              tar -czf "$CLI_ARCHIVE" -C "$STAGE" "$CLI_INNER"
+              ;;
+          esac
+
+      - name: Upload CLI archive to release
+        if: inputs.publish
+        run: gh release upload "$TAG" "$CLI_ARCHIVE" --clobber
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: .
+          # The repo root has no package.json. Run the Tauri CLI through npx instead.
+          tauriScript: npx --yes @tauri-apps/cli@^2
+          # Empty tagName means build only. Set it to publish to the release.
+          tagName: ${{ inputs.publish && inputs.tag || '' }}
+          releaseName: "rc-keeper v__VERSION__"
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Upload bundles and CLI as workflow artifacts
+        if: ${{ !inputs.publish }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundles-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/**/bundle/**/*.dmg
+            src-tauri/target/**/bundle/**/*.AppImage
+            src-tauri/target/**/bundle/**/*.deb
+            src-tauri/target/**/bundle/**/*.msi
+            src-tauri/target/**/bundle/**/*-setup.exe
+
+      - name: Upload CLI archive as workflow artifact
+        if: ${{ !inputs.publish }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.os }}
+          if-no-files-found: error
+          path: ${{ matrix.cli_archive }}
+
+  smoke:
+    name: Smoke ${{ matrix.name }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            pattern: "*universal.dmg"
+            cli_archive: rc-keeper-universal-apple-darwin.tar.gz
+            cli_inner: rc-keeper
+          - name: Linux x64
+            os: ubuntu-22.04
+            pattern: "*amd64.AppImage"
+            cli_archive: rc-keeper-x86_64-unknown-linux-gnu.tar.gz
+            cli_inner: rc-keeper
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            pattern: "*aarch64.AppImage"
+            cli_archive: rc-keeper-aarch64-unknown-linux-gnu.tar.gz
+            cli_inner: rc-keeper
+          - name: Windows
+            os: windows-latest
+            pattern: "*.msi"
+            cli_archive: rc-keeper-x86_64-pc-windows-msvc.zip
+            cli_inner: rc-keeper.exe
+    runs-on: ${{ matrix.os }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ inputs.tag }}
+      PATTERN: ${{ matrix.pattern }}
+      CLI_ARCHIVE: ${{ matrix.cli_archive }}
+      CLI_INNER: ${{ matrix.cli_inner }}
+    steps:
+      - name: Download release assets
+        if: inputs.publish
+        shell: bash
+        run: gh release download "$TAG" --pattern "$PATTERN" --pattern "$CLI_ARCHIVE" --dir "$RUNNER_TEMP/dl"
+
+      - name: Download bundle artifact
+        if: ${{ !inputs.publish }}
+        uses: actions/download-artifact@v4
+        with:
+          name: bundles-${{ matrix.os }}
+          path: ${{ runner.temp }}/dl
+
+      - name: Download CLI artifact
+        if: ${{ !inputs.publish }}
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-${{ matrix.os }}
+          path: ${{ runner.temp }}/dl
+
+      - name: Install (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          DL="$RUNNER_TEMP/dl"
+          DMG=$(find "$DL" -name '*.dmg' | head -n 1)
+          if [ -z "$DMG" ]; then echo "error: no .dmg under $DL" >&2; ls -R "$DL" >&2; exit 1; fi
+          MNT="$RUNNER_TEMP/mnt"
+          mkdir -p "$MNT"
+          hdiutil attach -nobrowse -quiet -mountpoint "$MNT" "$DMG"
+          cp -R "$MNT/rc-keeper.app" /Applications/
+          hdiutil detach -quiet "$MNT"
+          xattr -dr com.apple.quarantine /Applications/rc-keeper.app
+
+      - name: Launch GUI and check alive (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          BIN=/Applications/rc-keeper.app/Contents/MacOS/rc-keeper-gui
+          "$BIN" &
+          PID=$!
+          sleep 10
+          kill -0 "$PID"
+          kill "$PID" || true
+
+      - name: Install and prepare (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          DL="$RUNNER_TEMP/dl"
+          APPIMAGE=$(find "$DL" -name '*.AppImage' | head -n 1)
+          if [ -z "$APPIMAGE" ]; then echo "error: no .AppImage under $DL" >&2; ls -R "$DL" >&2; exit 1; fi
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgles2 libegl1 libgl1 mesa-utils
+          cp "$APPIMAGE" "$RUNNER_TEMP/rc-keeper.AppImage"
+          chmod +x "$RUNNER_TEMP/rc-keeper.AppImage"
+
+      - name: Launch GUI and check alive (Linux)
+        if: runner.os == 'Linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+        run: |
+          APP="$RUNNER_TEMP/rc-keeper.AppImage"
+          xvfb-run -a "$APP" &
+          PID=$!
+          sleep 10
+          kill -0 "$PID"
+          kill "$PID" || true
+
+      - name: Install (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dl = Join-Path $env:RUNNER_TEMP 'dl'
+          $msi = Get-ChildItem -Path $dl -Filter *.msi -Recurse | Select-Object -First 1
+          if (-not $msi) { Get-ChildItem -Path $dl -Recurse | Out-String | Write-Host; throw "no .msi under $dl" }
+          $p = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /norestart" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "msiexec exit code $($p.ExitCode)" }
+
+      - name: Launch GUI and check alive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:ProgramFiles 'rc-keeper\rc-keeper-gui.exe'
+          $app = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 10
+          if ($app.HasExited) { throw "rc-keeper-gui exited early with code $($app.ExitCode)" }
+          Stop-Process -Id $app.Id -Force
+
+      # The GUI starts the daemon as a sidecar. The CLI checks run against that daemon, then stop it.
+      - name: CLI smoke (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          set -eu
+          DL="$RUNNER_TEMP/dl"
+          ARCHIVE=$(find "$DL" -name "$CLI_ARCHIVE" | head -n 1)
+          if [ -z "$ARCHIVE" ]; then echo "error: no $CLI_ARCHIVE under $DL" >&2; ls -R "$DL" >&2; exit 1; fi
+          mkdir -p "$RUNNER_TEMP/cli"
+          tar -xzf "$ARCHIVE" -C "$RUNNER_TEMP/cli"
+          CLI="$RUNNER_TEMP/cli/$CLI_INNER"
+          chmod +x "$CLI"
+          "$CLI" version
+          OUT=$("$CLI" status --json)
+          echo "$OUT" | python3 -c 'import json,sys; assert json.load(sys.stdin) == []'
+          "$CLI" daemon stop
+
+      - name: CLI smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'cli'
+          $zip = Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP 'dl') -Filter $env:CLI_ARCHIVE -Recurse | Select-Object -First 1
+          if (-not $zip) { throw "no $env:CLI_ARCHIVE under dl" }
+          Expand-Archive -Path $zip.FullName -DestinationPath $dir -Force
+          $cli = Join-Path $dir $env:CLI_INNER
+          & $cli version
+          if ($LASTEXITCODE -ne 0) { throw "version failed" }
+          $out = (& $cli status --json) | Out-String
+          if ($LASTEXITCODE -ne 0) { throw "status --json failed" }
+          $parsed = $out | ConvertFrom-Json
+          if ($parsed.Count -ne 0) { throw "expected an empty instance list" }
+          & $cli daemon stop
+          if ($LASTEXITCODE -ne 0) { throw "daemon stop failed" }
