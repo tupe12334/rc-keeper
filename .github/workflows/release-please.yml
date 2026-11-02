@@ -43,15 +43,32 @@ jobs:
         if: steps.release.outputs.pr
         with:
           ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
-      - name: Sync Cargo.lock files with the bumped versions
+      # The man page embeds the version, so regenerate the docs too, or the
+      # "Generated docs drift" check fails on main after the release PR merges.
+      # The generator needs the UI dependencies, same as that CI job.
+      - uses: pnpm/action-setup@v4
+        if: steps.release.outputs.pr
+        with:
+          package_json_file: ui/package.json
+      - uses: actions/setup-node@v4
+        if: steps.release.outputs.pr
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+      - name: Sync Cargo.lock files and generated docs with the bumped versions
         if: steps.release.outputs.pr
         run: |
           cargo metadata --format-version 1 >/dev/null
           cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 >/dev/null
-          if git diff --quiet -- Cargo.lock src-tauri/Cargo.lock; then exit 0; fi
+          pnpm -C ui install --frozen-lockfile
+          cargo run -p xtask -- docs
+          paths=(Cargo.lock src-tauri/Cargo.lock docs/reference ui/src/api/generated.ts)
+          if [ -z "$(git status --porcelain -- "${paths[@]}")" ]; then exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: sync Cargo.lock with release versions" -- Cargo.lock src-tauri/Cargo.lock
+          git add -- "${paths[@]}"
+          git commit -m "chore: sync Cargo.lock and generated docs with release versions"
           git push
 
   build:
