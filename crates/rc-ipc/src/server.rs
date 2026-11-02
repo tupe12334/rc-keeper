@@ -1,8 +1,9 @@
 //! Daemon side: accept connections, one thread each, dispatch methods onto the Manager.
 
 use std::io::{self, BufRead, BufReader, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(unix)]
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 
 use anyhow::{bail, Context, Result};
@@ -11,36 +12,55 @@ use rc_core::{find_claude_bin, Manager, Settings};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 
-use crate::client::Client;
+use crate::client::{Client, ForeignDaemon};
 use crate::method::Method;
-use crate::paths::{config_dir, socket_name, socket_path};
+use crate::paths::{canonical_config_dir, config_dir, socket_name, socket_path};
 use crate::protocol::{Request, Response};
 use crate::schema::{CfgParams, GetSettingsResult, IdParams, PingResult, SetSettingsParams};
 
-/// Binds the daemon socket. Fails when a live daemon answers ping.
+/// Binds the daemon socket. Fails when a live daemon answers ping, on the new or the legacy socket.
 ///
-/// Never unlinks a socket that answers ping: a daemon that lost the race exits here
-/// and leaves the winner's socket in place.
+/// Holds an exclusive lock on the config dir's lock file before it probes or unlinks anything.
+/// A daemon that loses the race exits here and leaves the winner's socket in place.
 pub fn bind() -> Result<Listener> {
     prepare_config_dir().context("cannot create config dir")?;
+    lock_runtime_dir()?;
+    if daemon_answers()? {
+        bail!("rc-keeper daemon is already running");
+    }
     match try_bind() {
         Ok(listener) => Ok(listener),
         Err(e) if e.kind() == io::ErrorKind::AddrInUse => {
-            if Client::connect().and_then(|mut c| c.ping()).is_ok() {
+            if daemon_answers()? {
                 bail!("rc-keeper daemon is already running");
             }
-            // Nothing answers, so the file belongs to a dead daemon.
-            let _ = std::fs::remove_file(socket_path());
+            remove_stale_socket().context("cannot remove stale socket")?;
             try_bind().context("cannot bind rc-keeper socket")
         }
         Err(e) => Err(e).context("cannot bind rc-keeper socket"),
     }
 }
 
+/// True when a daemon for this config dir answers. Errors when another config dir owns the socket.
+fn daemon_answers() -> Result<bool> {
+    match Client::connect() {
+        Ok(_) => Ok(true),
+        Err(e) if e.is::<ForeignDaemon>() => Err(e),
+        Err(_) => Ok(false),
+    }
+}
+
 /// Serves requests forever on a socket from [`bind`].
 pub fn serve(listener: Listener, manager: Manager) -> ! {
+    serve_until(listener, manager, &AtomicBool::new(false));
+    unreachable!("the accept loop only returns when stop is set")
+}
+
+/// Serves until `stop` is set and one more connection arrives to wake the accept loop.
+pub fn serve_until(listener: Listener, manager: Manager, stop: &AtomicBool) {
     loop {
         match listener.accept() {
+            Ok(_) if stop.load(Ordering::SeqCst) => return,
             Ok(stream) => {
                 let manager = manager.clone();
                 thread::spawn(move || handle(stream, &manager));
@@ -61,6 +81,36 @@ pub fn shutdown_and_exit(manager: &Manager) -> ! {
 #[cfg(unix)]
 static OWN_INODE: OnceLock<u64> = OnceLock::new();
 
+/// Lock files held for the life of the process, one per config dir.
+#[cfg(unix)]
+static LOCKS: Mutex<Vec<std::fs::File>> = Mutex::new(Vec::new());
+
+/// Exclusive `flock` on `<runtime dir>/<hash>.lock`. Released when the process exits.
+#[cfg(unix)]
+fn lock_runtime_dir() -> Result<()> {
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::os::unix::io::AsRawFd;
+    crate::paths::ensure_runtime_dir().context("cannot use runtime dir")?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(crate::paths::lock_path())
+        .context("cannot open daemon lock")?;
+    // SAFETY: the fd stays valid while `file` lives, and we keep it in LOCKS.
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        bail!("rc-keeper daemon is already running");
+    }
+    LOCKS.lock().unwrap_or_else(|e| e.into_inner()).push(file);
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn lock_runtime_dir() -> Result<()> {
+    Ok(())
+}
+
 fn try_bind() -> io::Result<Listener> {
     let listener = ListenerOptions::new().name(socket_name()?).create_sync()?;
     #[cfg(unix)]
@@ -68,9 +118,34 @@ fn try_bind() -> io::Result<Listener> {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
         let path = socket_path();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-        let _ = OWN_INODE.set(std::fs::metadata(&path)?.ino());
+        let _ = OWN_INODE.set(std::fs::symlink_metadata(&path)?.ino());
     }
     Ok(listener)
+}
+
+/// Removes the socket file only when it is a socket we own. Called while holding the lock.
+#[cfg(unix)]
+fn remove_stale_socket() -> io::Result<()> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    let path = socket_path();
+    let meta = match std::fs::symlink_metadata(&path) {
+        Ok(m) => m,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    if !meta.file_type().is_socket() || meta.uid() != crate::paths::current_uid() {
+        return Err(io::Error::other(format!(
+            "{} is not our socket",
+            path.display()
+        )));
+    }
+    std::fs::remove_file(&path)
+}
+
+#[cfg(not(unix))]
+fn remove_stale_socket() -> io::Result<()> {
+    // Named pipes have no file to remove.
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -78,7 +153,7 @@ fn remove_own_socket() {
     use std::os::unix::fs::MetadataExt;
     let Some(ino) = OWN_INODE.get() else { return };
     let path = socket_path();
-    if std::fs::metadata(&path).is_ok_and(|m| m.ino() == *ino) {
+    if std::fs::symlink_metadata(&path).is_ok_and(|m| m.ino() == *ino) {
         let _ = std::fs::remove_file(&path);
     }
 }
@@ -93,11 +168,18 @@ fn prepare_config_dir() -> io::Result<()> {
     let dir = config_dir();
     #[cfg(unix)]
     {
-        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+        use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
         std::fs::DirBuilder::new()
             .recursive(true)
             .mode(0o700)
             .create(&dir)?;
+        let meta = std::fs::symlink_metadata(&dir)?;
+        if !meta.is_dir() || meta.uid() != crate::paths::current_uid() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("{} must be a real dir we own", dir.display()),
+            ));
+        }
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
     }
     #[cfg(not(unix))]
@@ -160,6 +242,7 @@ fn dispatch(manager: &Manager, method: &str, params: &Value) -> Result<Value, St
         Method::Ping => to_value(PingResult {
             version: env!("CARGO_PKG_VERSION").to_string(),
             pid: std::process::id(),
+            config_dir: canonical_config_dir(),
         }),
         Method::Shutdown => Ok(Value::Null),
         Method::ListInstances => to_value(manager.list()),
