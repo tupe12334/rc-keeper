@@ -1,0 +1,71 @@
+//! `daemon`, `daemon run`, `daemon stop`, `daemon status`.
+
+use std::thread;
+use std::time::{Duration, Instant};
+
+use anyhow::{bail, Result};
+use rc_core::Manager;
+use rc_ipc::{config_dir, shutdown_and_exit, socket_path};
+use serde_json::{json, Value};
+
+use crate::autostart_daemon::live_client;
+use crate::cli::Exit;
+use crate::output::print_json;
+
+pub fn run() -> Result<()> {
+    if live_client().is_some() {
+        bail!("another rc-keeper daemon is already running");
+    }
+    let manager = Manager::load(config_dir());
+    let for_signal = manager.clone();
+    ctrlc::set_handler(move || shutdown_and_exit(&for_signal))?;
+    rc_ipc::serve(manager)
+}
+
+/// Exit 0 when the daemon stopped or was not running.
+pub fn stop() -> Result<()> {
+    let Some(mut client) = live_client() else {
+        println!("not running");
+        return Ok(());
+    };
+    client.call("shutdown", Value::Null)?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while live_client().is_some() {
+        if Instant::now() > deadline {
+            bail!("daemon did not exit after shutdown");
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    println!("daemon stopped");
+    Ok(())
+}
+
+/// Exit 0 when running, 2 when not.
+pub fn status(json: bool) -> Result<()> {
+    let socket = socket_path();
+    let Some(mut client) = live_client() else {
+        if json {
+            print_json(&json!({ "running": false, "socketPath": socket }))?;
+        } else {
+            println!("not running\nsocket {}", socket.display());
+        }
+        return Err(Exit(2).into());
+    };
+    let info = client.ping()?;
+    if json {
+        print_json(&json!({
+            "running": true,
+            "version": info["version"],
+            "pid": info["pid"],
+            "socketPath": socket,
+        }))
+    } else {
+        println!(
+            "running\nversion {}\npid {}\nsocket {}",
+            info["version"].as_str().unwrap_or("unknown"),
+            info["pid"],
+            socket.display()
+        );
+        Ok(())
+    }
+}
