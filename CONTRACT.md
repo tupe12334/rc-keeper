@@ -64,3 +64,18 @@ New crates (one owner each):
 - CLI daemon group: `rc-keeper daemon` / `daemon run` (foreground), `daemon stop` (IPC `shutdown`; exit 0 also when not running), `daemon status [--json]` (exit 0 running, 2 not running).
 - Every crate `Cargo.toml` and `src-tauri/Cargo.toml` uses a literal `version = "x.y.z"` (no `version.workspace`), so release-please can bump it.
 - Service restart semantics: the OS service restarts the daemon only on failure (systemd `Restart=on-failure`, launchd `KeepAlive.SuccessfulExit=false`), so `rc-keeper daemon stop` stays stopped. Socket: config dir 0700, socket 0600.
+
+## v3 addendum: git-compatible config
+The config dir can be a git repo (dotfiles), shared across machines. Rules:
+- **Only diffable text is tracked.** Layout in `<config_dir>`:
+  - `settings.json` — shared settings (portable values only).
+  - `instances/<id>.json` — one file per instance, so adding or editing one instance never touches another's file.
+  - `settings.local.json` — machine-specific values (`claudeBin`); never shared.
+  - runtime (never tracked): `status.json`, `daemon.log`, `rc-keeper.sock`, `*.tmp`.
+  - The daemon writes `<config_dir>/.gitignore` (if missing) listing the local + runtime files.
+- **Deterministic bytes:** pretty JSON, 2-space indent, `\n` line endings, trailing newline, fixed key order = struct declaration order (`id`, `name`, `folder`, then the rest A–Z); `null`/unset optional fields omitted; `extraArgs` kept in user order. Re-saving unchanged config produces identical bytes (no timestamps, no runtime state in config).
+- **Portable paths:** `folder` under the home dir is stored as `~/...`, expanded at load; other paths stay absolute.
+- **Stable ids:** slug of the folder's last path segment (`rc-keeper`, collisions → `-2`), not random UUIDs; the file name equals the id and is never renamed on edit.
+- **Live reload:** the daemon watches the dir (`notify` crate) and applies external edits (e.g. after `git pull`): added → added, removed → stopped+removed, changed → restarted if running. Invalid file → logged + shown as `error` state, others unaffected.
+- **Migration:** a legacy single `config.json` is split into the new layout once, then renamed `config.json.migrated`.
+- `rc-keeper config path` prints the dir; env `RC_KEEPER_CONFIG_DIR` overrides it (point it at a git repo).
