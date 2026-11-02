@@ -39,6 +39,7 @@ export default function App() {
         <header className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2" role="status" aria-live="polite">
             <span aria-hidden className={`size-3 rounded-full ${dot[tone]}`} />
+            <img src="/favicon.svg" alt="" className="size-6" />
             <h1 className="text-xl font-semibold">rc-keeper</h1>
             <span className="text-sm text-muted-foreground">{overallLabel[tone]}</span>
           </div>

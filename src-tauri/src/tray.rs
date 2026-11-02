@@ -2,6 +2,7 @@ use std::thread;
 
 use serde_json::{json, Value};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::image::Image;
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager as _};
 
@@ -9,6 +10,11 @@ use crate::daemon::{self, Daemon};
 
 pub const TRAY_ID: &str = "main";
 pub const OFFLINE_TEXT: &str = "rc-keeper: daemon not running";
+// Black template glyph on macOS; white glyph elsewhere, since dark trays hide black.
+#[cfg(target_os = "macos")]
+const TRAY_PNG: &[u8] = include_bytes!("../icons/tray.png");
+#[cfg(not(target_os = "macos"))]
+const TRAY_PNG: &[u8] = include_bytes!("../icons/tray-light.png");
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(
@@ -23,18 +29,18 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
             &MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?,
         ],
     )?;
-    let icon = app
-        .default_window_icon()
-        .cloned()
-        .ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))?;
+    let icon = Image::from_bytes(TRAY_PNG)?;
 
-    TrayIconBuilder::with_id(TRAY_ID)
+    let builder = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .tooltip("rc-keeper")
         .menu(&menu)
         .show_menu_on_left_click(true)
-        .on_menu_event(|app, event| on_menu(app, event.id.0.as_str()))
-        .build(app)?;
+        .on_menu_event(|app, event| on_menu(app, event.id.0.as_str()));
+    // macOS recolors template icons for light and dark menu bars.
+    #[cfg(target_os = "macos")]
+    let builder = builder.icon_as_template(true);
+    builder.build(app)?;
     Ok(())
 }
 
