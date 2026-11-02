@@ -160,11 +160,18 @@ fn slug_collisions_get_suffixes() {
     for id in &ids {
         assert!(dir.join(format!("instances/{id}.json")).exists());
     }
-    // Editing never renames the file or the id.
-    let mut cfg = m.list()[1].config.clone();
+    // Editing never renames the file or the id. Look up by id, not by list position.
+    let by_id = |m: &Manager, id: &str| {
+        m.list()
+            .into_iter()
+            .find(|v| v.config.id == id)
+            .unwrap()
+            .config
+    };
+    let mut cfg = by_id(&m, "work-2");
     cfg.folder = "/srv/z/renamed".into();
     m.update(cfg).unwrap();
-    assert_eq!(m.list()[1].config.id, "work-2");
+    assert_eq!(by_id(&m, "work-2").folder, Path::new("/srv/z/renamed"));
     assert!(dir.join("instances/work-2.json").exists());
 }
 
@@ -377,4 +384,39 @@ fn replaced_config_dir_is_reloaded_and_watched_again() {
     )
     .unwrap();
     assert!(within_two_seconds(|| ids(&m).contains(&"later".to_owned())));
+}
+
+#[test]
+fn list_order_is_sorted_by_id_and_survives_reload() {
+    let dir = fresh_dir("stable-order");
+    let m = Manager::load(dir.clone());
+    // Added in reverse id order.
+    for folder in ["/srv/zeta", "/srv/mid", "/srv/alpha"] {
+        m.add(inst(folder)).unwrap();
+    }
+    assert_eq!(ids(&m), ["alpha", "mid", "zeta"]);
+
+    // A file written by hand triggers a watcher reload.
+    fs::write(
+        dir.join("instances/beta.json"),
+        "{\n  \"id\": \"beta\",\n  \"folder\": \"/srv/beta\"\n}\n",
+    )
+    .unwrap();
+    assert!(within_two_seconds(|| ids(&m).contains(&"beta".to_owned())));
+    assert_eq!(ids(&m), ["alpha", "beta", "mid", "zeta"]);
+}
+
+#[test]
+fn file_closed_after_write_reloads() {
+    use std::io::Write;
+    let dir = fresh_dir("close-write");
+    let m = Manager::load(dir.clone());
+    fs::create_dir_all(dir.join("instances")).unwrap();
+    {
+        // Written and closed in place, not renamed into place.
+        let mut f = fs::File::create(dir.join("instances/held.json")).unwrap();
+        f.write_all(b"{\n  \"id\": \"held\",\n  \"folder\": \"/srv/held\"\n}\n")
+            .unwrap();
+    }
+    assert!(within_two_seconds(|| ids(&m).contains(&"held".to_owned())));
 }

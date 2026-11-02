@@ -44,6 +44,7 @@ The config dir can be a git repo (dotfiles), shared across machines. Rules:
 - **Deterministic bytes:** pretty JSON, 2-space indent, `\n` line endings, trailing newline, fixed key order = struct declaration order (`id`, `name`, `folder`, then the rest A–Z); `null`/unset optional fields omitted; `extraArgs` kept in user order. Re-saving unchanged config produces identical bytes (no timestamps, no runtime state in config).
 - **Portable paths:** `folder` under the home dir is stored as `~/...`, expanded at load; other paths stay absolute.
 - **Stable ids:** slug of the folder's last path segment (`rc-keeper`, collisions → `-2`), not random UUIDs; the file name equals the id and is never renamed on edit.
+- **List order:** `list_instances` and `status.json` list instances sorted by `id`.
 - **Live reload:** the daemon watches the dir (`notify` crate) and applies external edits (e.g. after `git pull`): added → added, removed → stopped+removed, changed → restarted if running. Invalid file → logged + shown as `error` state, others unaffected.
 - **Migration:** a legacy single `config.json` is split into the new layout once, then renamed `config.json.migrated`.
 - `rc-keeper config path` prints the dir; env `RC_KEEPER_CONFIG_DIR` overrides it (point it at a git repo).
