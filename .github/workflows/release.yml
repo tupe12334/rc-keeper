@@ -1,0 +1,21 @@
+name: Release (manual)
+
+# Fallback: build and smoke-test an existing tag by hand.
+# Normal releases run from release-please.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, for example v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      tag: ${{ inputs.tag }}
+    secrets: inherit
