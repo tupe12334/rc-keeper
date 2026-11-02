@@ -8,7 +8,11 @@
     "dialog:allow-open",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://claude.ai/*" }]
+      "allow": [
+        { "url": "https://claude.ai/*" },
+        { "url": "https://code.claude.com/*" },
+        { "url": "https://github.com/tupe12334/rc-keeper/blob/main/*" }
+      ]
     }
   ]
 }
