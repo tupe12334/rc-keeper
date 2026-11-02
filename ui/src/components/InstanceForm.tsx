@@ -3,6 +3,7 @@ import { AlertTriangle, FolderOpen } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { api, isTauri, type InstanceConfig } from "@/api";
+import { FieldHelp } from "@/components/FieldHelp";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -88,9 +89,12 @@ export function InstanceForm({ initial, onClose }: Props) {
           }}
         >
           <div className="grid gap-1.5">
-            <label htmlFor="f-folder" className={label}>
-              Folder
-            </label>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="f-folder" className={label}>
+                Folder
+              </label>
+              <FieldHelp field="folder" />
+            </div>
             <div className="flex gap-2">
               <Input id="f-folder" value={form.folder} onChange={(e) => set("folder", e.target.value)} placeholder="/Users/you/project" aria-invalid={error?.field === "folder"} aria-describedby={describe("folder")} />
               {isTauri && (
@@ -103,26 +107,35 @@ export function InstanceForm({ initial, onClose }: Props) {
           </div>
 
           <div className="grid gap-1.5">
-            <label htmlFor="f-name" className={label}>
-              Name
-            </label>
-            <Input id="f-name" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Defaults to the folder name" />
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="f-name" className={label}>
+                Name
+              </label>
+              <FieldHelp field="name" />
+            </div>
+            <Input id="f-name" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Auto-generated when empty" />
           </div>
 
           <div className="flex items-center justify-between gap-4">
             <div>
-              <label htmlFor="f-chrome" className={label}>
-                Chrome
-              </label>
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="f-chrome" className={label}>
+                  Chrome
+                </label>
+                <FieldHelp field="chrome" />
+              </div>
               <p className={hint}>Pass the Chrome integration flag.</p>
             </div>
             <Switch id="f-chrome" checked={form.chrome} onCheckedChange={(v) => set("chrome", v)} />
           </div>
 
           <div className="grid gap-1.5">
-            <span id="f-perm-label" className={label}>
-              Permission mode
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span id="f-perm-label" className={label}>
+                Permission mode
+              </span>
+              <FieldHelp field="permissionMode" value={form.permissionMode === UNSET ? undefined : form.permissionMode} />
+            </div>
             <Select value={form.permissionMode} onValueChange={(v) => set("permissionMode", v)}>
               <SelectTrigger aria-labelledby="f-perm-label">
                 <SelectValue />
@@ -145,9 +158,12 @@ export function InstanceForm({ initial, onClose }: Props) {
           </div>
 
           <div className="grid gap-1.5">
-            <span id="f-spawn-label" className={label}>
-              Spawn mode
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span id="f-spawn-label" className={label}>
+                Spawn mode
+              </span>
+              <FieldHelp field="spawn" value={form.spawn === UNSET ? undefined : form.spawn} />
+            </div>
             <Select value={form.spawn} onValueChange={(v) => set("spawn", v)}>
               <SelectTrigger aria-labelledby="f-spawn-label">
                 <SelectValue />
@@ -164,16 +180,22 @@ export function InstanceForm({ initial, onClose }: Props) {
           </div>
 
           <div className="grid gap-1.5">
-            <label htmlFor="f-capacity" className={label}>
-              Capacity
-            </label>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="f-capacity" className={label}>
+                Capacity
+              </label>
+              <FieldHelp field="capacity" />
+            </div>
             <Input id="f-capacity" type="number" min={1} inputMode="numeric" value={form.capacity} onChange={(e) => set("capacity", e.target.value)} placeholder="Unset" aria-invalid={error?.field === "capacity"} aria-describedby={describe("capacity")} />
           </div>
 
           <div className="grid gap-1.5">
-            <span id="f-cwd-label" className={label}>
-              Create session in directory
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span id="f-cwd-label" className={label}>
+                Create session in directory
+              </span>
+              <FieldHelp field="createSessionInDir" value={form.createSessionInDir === "unset" ? undefined : form.createSessionInDir} />
+            </div>
             <Select value={form.createSessionInDir} onValueChange={(v) => set("createSessionInDir", v)}>
               <SelectTrigger aria-labelledby="f-cwd-label">
                 <SelectValue />
@@ -187,34 +209,46 @@ export function InstanceForm({ initial, onClose }: Props) {
           </div>
 
           <div className="grid gap-1.5">
-            <label htmlFor="f-prefix" className={label}>
-              Session name prefix
-            </label>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="f-prefix" className={label}>
+                Session name prefix
+              </label>
+              <FieldHelp field="sessionNamePrefix" />
+            </div>
             <Input id="f-prefix" value={form.sessionNamePrefix} onChange={(e) => set("sessionNamePrefix", e.target.value)} />
           </div>
 
           <div className="grid gap-1.5">
-            <label htmlFor="f-args" className={label}>
-              Extra arguments
-            </label>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="f-args" className={label}>
+                Extra arguments
+              </label>
+              <FieldHelp field="extraArgs" />
+            </div>
             <Input id="f-args" value={form.extraArgs} onChange={(e) => set("extraArgs", e.target.value)} placeholder="--verbose --foo" />
             <p className={hint}>Separated by spaces.</p>
           </div>
 
           <div className="flex items-start justify-between gap-4">
             <div>
-              <label htmlFor="f-trust" className={label}>
-                Trust this folder automatically
-              </label>
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="f-trust" className={label}>
+                  Trust this folder automatically
+                </label>
+                <FieldHelp field="autoTrust" />
+              </div>
               <p className={hint}>{TRUST_HELP}</p>
             </div>
             <Switch id="f-trust" checked={form.autoTrust} onCheckedChange={(v) => set("autoTrust", v)} />
           </div>
 
           <div className="flex items-center justify-between gap-4">
-            <label htmlFor="f-autostart" className={label}>
-              Start when the app opens
-            </label>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="f-autostart" className={label}>
+                Start when the app opens
+              </label>
+              <FieldHelp field="autoStart" />
+            </div>
             <Switch id="f-autostart" checked={form.autoStart} onCheckedChange={(v) => set("autoStart", v)} />
           </div>
 
