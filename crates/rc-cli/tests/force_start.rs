@@ -1,8 +1,7 @@
 //! `start --force` and the force-boot flags, through the real `rc-keeper` binary. The folder is
-//! a temp dir, and both claude fakes are shell scripts there. Unix only.
+//! a temp dir and the claude stand-in is a copy of the fake named `claude`. Unix only.
 #![cfg(unix)]
 
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command as Std, Stdio};
 use std::thread;
@@ -12,7 +11,7 @@ use assert_cmd::assert::Assert;
 use assert_cmd::Command;
 use serde_json::Value;
 
-const SESSION_URL: &str = "https://claude.ai/code/session_force";
+const SESSION_URL: &str = "https://claude.ai/code/session_takeover";
 
 /// Stops the daemon and the foreign fake when the test ends, even on panic.
 struct Guard {
@@ -43,18 +42,8 @@ fn fresh_root(name: &str) -> PathBuf {
     root
 }
 
-fn write_exec(path: &Path, body: &str) {
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(path, body).unwrap();
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
-}
-
 fn stdout(assert: &Assert) -> String {
     String::from_utf8_lossy(&assert.get_output().stdout).into_owned()
-}
-
-fn json(assert: &Assert) -> Value {
-    serde_json::from_slice(&assert.get_output().stdout).expect("stdout is JSON")
 }
 
 fn wait_until<T>(what: &str, timeout: Duration, mut f: impl FnMut() -> Option<T>) -> T {
@@ -84,65 +73,61 @@ fn command_line(pid: u32) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
-/// Starts a foreign rc in `folder`. Its shell exits, so it is re-parented to init.
-fn spawn_foreign(bin: &Path, folder: &Path) -> u32 {
+/// Starts a foreign rc from `claude` in `folder`. Its shell exits, so it is re-parented to init.
+fn spawn_foreign(claude: &Path, folder: &Path) -> u32 {
     let out = Std::new("sh")
         .arg("-c")
         .arg(r#""$0" remote-control >/dev/null 2>&1 & echo $!"#)
-        .arg(bin)
+        .arg(claude)
         .current_dir(folder)
         .stdin(Stdio::null())
         .output()
         .unwrap();
     let pid: u32 = String::from_utf8_lossy(&out.stdout).trim().parse().unwrap();
-    // The forked child may still be pre-exec. Wait until its command line names claude.
     wait_until("foreign exec", Duration::from_secs(5), || {
-        command_line(pid).contains("claude").then_some(())
+        command_line(pid)
+            .contains("claude remote-control")
+            .then_some(())
     });
     pid
 }
 
 fn views(root: &Path) -> Value {
-    json(&rk(root).args(["list", "--json"]).assert().success())
+    serde_json::from_slice(&rk(root).args(["list", "--json"]).output().unwrap().stdout).unwrap()
 }
 
 #[test]
-fn start_force_takes_the_folder_from_a_foreign_rc() {
+fn start_force_needs_consent_then_takes_the_folder() {
     let root = fresh_root("start");
     let folder = root.join("project");
     std::fs::create_dir_all(&folder).unwrap();
     let pidfile = root.join("foreign.pid");
 
-    let foreign_bin = root.join("foreign-bin/claude");
-    write_exec(&foreign_bin, "#!/bin/sh\nwhile :; do sleep 1; done\n");
-    // Busy while the foreign pid is alive. Otherwise ready with a session URL.
-    let instance_bin = root.join("instance-bin/claude");
-    write_exec(
-        &instance_bin,
-        &format!(
-            "#!/bin/sh\npid=$(cat \"{}\" 2>/dev/null)\nif [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null; then\n  echo \"Error: This folder is already served by a terminal \\`claude remote-control\\`.\"\n  exit 1\nfi\necho \"Remote Control ready {SESSION_URL}\"\nwhile :; do sleep 1; done\n",
-            pidfile.display()
-        ),
-    );
+    // One copy of the fake, named `claude`. The instance reads --pidfile to see if it is busy.
+    let claude = root.join("bin/claude");
+    std::fs::create_dir_all(claude.parent().unwrap()).unwrap();
+    std::fs::copy(env!("CARGO_BIN_EXE_fake-claude-cli"), &claude).unwrap();
 
     let mut guard = Guard {
         root: root.clone(),
         foreign: None,
     };
     rk(&root)
-        .args([
-            "config",
-            "set",
-            "claude-bin",
-            instance_bin.to_str().unwrap(),
-        ])
+        .args(["config", "set", "claude-bin", claude.to_str().unwrap()])
         .assert()
         .success();
 
-    eprintln!("step: add with --no-auto-start, then --force-boot and --no-force-boot");
+    eprintln!("step: add with --no-auto-start; --force-boot and --no-force-boot round-trip");
+    let pidarg = format!("--pidfile={}", pidfile.display());
     let id = stdout(
         &rk(&root)
-            .args(["add", folder.to_str().unwrap(), "--no-auto-start"])
+            .args([
+                "add",
+                folder.to_str().unwrap(),
+                "--no-auto-start",
+                "--",
+                &pidarg,
+            ])
             .assert()
             .success(),
     )
@@ -159,35 +144,17 @@ fn start_force_takes_the_folder_from_a_foreign_rc() {
         .success();
     assert_eq!(views(&root)[0]["config"]["forceBoot"], false);
     rk(&root)
-        .args([
-            "add",
-            folder.to_str().unwrap(),
-            "--force-boot",
-            "--no-force-boot",
-        ])
+        .args(["edit", &id, "--force-boot", "--no-force-boot"])
         .assert()
         .code(1);
-    rk(&root).args(["remove", &id]).assert().success();
-
-    eprintln!("step: add again with --force-boot off, start with --force");
-    let id = stdout(
-        &rk(&root)
-            .args(["add", folder.to_str().unwrap(), "--no-auto-start"])
-            .assert()
-            .success(),
-    )
-    .trim()
-    .to_string();
-
-    let foreign = spawn_foreign(&foreign_bin, &folder);
-    std::fs::write(&pidfile, foreign.to_string()).unwrap();
-    guard.foreign = Some(foreign);
 
     eprintln!("step: plain start reports folder-busy and leaves the foreign rc alive");
+    let foreign = spawn_foreign(&claude, &folder);
+    std::fs::write(&pidfile, foreign.to_string()).unwrap();
+    guard.foreign = Some(foreign);
     rk(&root).args(["start", &id]).assert().success();
     wait_until("folder busy", Duration::from_secs(15), || {
-        let v = views(&root);
-        (v[0]["status"]["state"] == "folder-busy").then_some(())
+        (views(&root)[0]["status"]["state"] == "folder-busy").then_some(())
     });
     assert!(pid_alive(foreign), "plain start stopped the foreign rc");
 
@@ -197,8 +164,29 @@ fn start_force_takes_the_folder_from_a_foreign_rc() {
         .assert()
         .code(1);
 
-    eprintln!("step: start --force stops the foreign pid and starts the instance");
-    let out = stdout(&rk(&root).args(["start", &id, "--force"]).assert().success());
+    eprintln!("step: --yes without --force is a usage error");
+    rk(&root).args(["start", &id, "--yes"]).assert().code(1);
+
+    eprintln!("step: --force with no terminal and no --yes refuses and stops nothing");
+    let refused = rk(&root).args(["start", &id, "--force"]).assert().code(1);
+    let err = String::from_utf8_lossy(&refused.get_output().stderr).into_owned();
+    assert!(err.contains("--yes"), "got: {err}");
+    assert!(
+        pid_alive(foreign),
+        "refused force still stopped the foreign rc"
+    );
+
+    eprintln!("step: --force --yes previews, stops the foreign pid, and starts the instance");
+    let out = stdout(
+        &rk(&root)
+            .args(["start", &id, "--force", "--yes"])
+            .assert()
+            .success(),
+    );
+    assert!(
+        out.contains(&format!("will stop pid {foreign}")),
+        "got: {out}"
+    );
     assert!(
         out.contains(&format!("stopped pid {foreign}")),
         "got: {out}"

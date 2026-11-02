@@ -122,7 +122,7 @@ export function InstanceCard({ view, onEdit, onLogs, onChanged }: Props) {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Take over {title}?</DialogTitle>
-            <DialogDescription>Stops the claude remote-control process below, then starts this folder under rc-keeper.</DialogDescription>
+            <DialogDescription>Kills the claude remote-control process below (SIGTERM, then SIGKILL after 5 s), then starts this folder under rc-keeper. PIDs are re-checked on confirm.</DialogDescription>
           </DialogHeader>
           {takeover?.stopped.length ? (
             <ul className="flex flex-col gap-1 font-mono text-sm" aria-label="Processes to stop">
@@ -143,11 +143,12 @@ export function InstanceCard({ view, onEdit, onLogs, onChanged }: Props) {
               Cancel
             </Button>
             <Button
+              variant="destructive"
               onClick={() => {
                 setTakeover(null);
                 void act(async () => {
                   const result = await api.forceStart(cfg.id);
-                  toast.success(result.stopped.length ? "Stopped " + result.stopped.join(", ") : "Started. No other process stopped.");
+                  toast.success(result.stopped.length ? "Stopped PID " + result.stopped.join(", PID ") : "Started. No other process stopped.");
                 });
               }}
             >

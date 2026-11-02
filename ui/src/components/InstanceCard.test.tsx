@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { api, type InstanceView } from "@/api";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { InstanceCard } from "./InstanceCard";
@@ -57,6 +58,7 @@ describe("Take over", () => {
   it("lists the pids from the preview and stops nothing until confirmed", async () => {
     const preview = vi.spyOn(api, "previewForceStart").mockResolvedValue({ stopped: [4321, 4322], respawnRisk: null });
     const force = vi.spyOn(api, "forceStart").mockResolvedValue({ stopped: [4321, 4322], respawnRisk: null });
+    const success = vi.spyOn(toast, "success").mockReturnValue("");
     const user = userEvent.setup();
     render(card(view("folder-busy")));
 
@@ -67,8 +69,11 @@ describe("Take over", () => {
     expect(within(dialog).getByText("PID 4322")).toBeInTheDocument();
     expect(force).not.toHaveBeenCalled();
 
-    await user.click(within(dialog).getByRole("button", { name: "Take over folder" }));
+    const confirm = within(dialog).getByRole("button", { name: "Take over folder" });
+    expect(confirm).toHaveClass("bg-destructive");
+    await user.click(confirm);
     expect(force).toHaveBeenCalledWith("app");
+    expect(success).toHaveBeenCalledWith("Stopped PID 4321, PID 4322");
   });
 
   it("cancel closes the dialog and does not take over", async () => {

@@ -1,4 +1,4 @@
-//! Force boot against fake `claude` scripts. A foreign fake plays the other `claude remote-control`
+//! Force boot against a fake `claude` binary. A foreign fake plays the other `claude remote-control`
 //! that holds a folder. Only processes in temp folders are touched.
 #![cfg(unix)]
 
@@ -8,20 +8,6 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 const SESSION_URL: &str = "https://claude.ai/code/session_takeover";
-
-/// The other claude rc. Loops in the shell with short sleeps, so SIGTERM ends it at once.
-const FOREIGN: &str = "#!/bin/sh\nwhile :; do sleep 1; done\n";
-
-/// Our instance's claude. Busy while the foreign pid in PIDFILE is alive, else ready.
-const INSTANCE: &str = r#"#!/bin/sh
-pid=$(cat "PIDFILE" 2>/dev/null)
-if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-  echo "Error: This folder is already served by a terminal \`claude remote-control\`."
-  exit 1
-fi
-echo "Remote Control ready SESSION_URL"
-while :; do sleep 1; done
-"#;
 
 /// Kills the given pids when dropped, so a failed test leaves no fake behind.
 struct Reap(Vec<u32>);
@@ -42,13 +28,6 @@ struct Env {
     pidfile: PathBuf,
 }
 
-fn write_exec(path: &Path, body: &str) {
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    std::fs::write(path, body).unwrap();
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
-}
-
 /// Fresh temp tree: two work folders, a foreign fake, an instance fake, and a manager.
 fn setup(name: &str) -> Env {
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
@@ -58,26 +37,23 @@ fn setup(name: &str) -> Env {
     std::fs::create_dir_all(&folder).unwrap();
     std::fs::create_dir_all(&other).unwrap();
 
-    let foreign_bin = root.join("foreign-bin/claude");
-    write_exec(&foreign_bin, FOREIGN);
+    // Both roles run one copy of the fake, named `claude`, so the matcher sees that argv[0].
+    let claude = root.join("bin/claude");
+    std::fs::create_dir_all(claude.parent().unwrap()).unwrap();
+    std::fs::copy(env!("CARGO_BIN_EXE_fake-claude"), &claude).unwrap();
     let pidfile = root.join("foreign.pid");
-    let instance_bin = root.join("instance-bin/claude");
-    let script = INSTANCE
-        .replace("PIDFILE", &pidfile.display().to_string())
-        .replace("SESSION_URL", SESSION_URL);
-    write_exec(&instance_bin, &script);
 
     let manager = Manager::load(root.join("config"));
     manager
         .set_settings(Settings {
-            claude_bin: Some(instance_bin),
+            claude_bin: Some(claude.clone()),
         })
         .unwrap();
     Env {
         manager,
         folder,
         other,
-        foreign_bin,
+        foreign_bin: claude,
         pidfile,
     }
 }
@@ -96,7 +72,7 @@ fn spawn_foreign(bin: &Path, cwd: &Path, pidfile: Option<&Path>) -> u32 {
     let pid: u32 = String::from_utf8_lossy(&out.stdout).trim().parse().unwrap();
     // The forked child may still be pre-exec, so its command line lacks `claude`. Wait for exec.
     let end = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < end && !command_line(pid).contains("claude") {
+    while Instant::now() < end && !command_line(pid).contains("claude remote-control") {
         std::thread::sleep(Duration::from_millis(20));
     }
     if let Some(path) = pidfile {
@@ -121,11 +97,13 @@ fn pid_alive(pid: u32) -> bool {
         .unwrap_or(false)
 }
 
-fn instance(folder: &Path, force_boot: bool) -> InstanceConfig {
+/// Instance config. The fake reads `--pidfile` to decide whether the folder is busy.
+fn instance(env: &Env, force_boot: bool) -> InstanceConfig {
     InstanceConfig {
-        folder: folder.to_path_buf(),
+        folder: env.folder.clone(),
         auto_trust: true,
         force_boot,
+        extra_args: vec![format!("--pidfile={}", env.pidfile.display())],
         ..Default::default()
     }
 }
@@ -160,7 +138,7 @@ fn force_start_stops_the_foreign_rc_and_reaches_running() {
     let env = setup("force_start");
     let foreign = spawn_foreign(&env.foreign_bin, &env.folder, Some(&env.pidfile));
     let _reap = Reap(vec![foreign]);
-    let id = env.manager.add(instance(&env.folder, false)).unwrap();
+    let id = env.manager.add(instance(&env, false)).unwrap();
 
     env.manager.start(&id).unwrap();
     let busy = wait_for(Duration::from_secs(15), || {
@@ -200,7 +178,7 @@ fn force_boot_takes_over_automatically() {
     let env = setup("force_boot_auto");
     let foreign = spawn_foreign(&env.foreign_bin, &env.folder, Some(&env.pidfile));
     let _reap = Reap(vec![foreign]);
-    let id = env.manager.add(instance(&env.folder, true)).unwrap();
+    let id = env.manager.add(instance(&env, true)).unwrap();
 
     env.manager.start(&id).unwrap();
     assert!(
@@ -221,7 +199,7 @@ fn foreign_rc_in_another_folder_is_never_killed() {
     let foreign_here = spawn_foreign(&env.foreign_bin, &env.folder, Some(&env.pidfile));
     let bystander = spawn_foreign(&env.foreign_bin, &env.other, None);
     let _reap = Reap(vec![foreign_here, bystander]);
-    let id = env.manager.add(instance(&env.folder, true)).unwrap();
+    let id = env.manager.add(instance(&env, true)).unwrap();
 
     env.manager.start(&id).unwrap();
     assert!(
@@ -244,7 +222,7 @@ fn foreign_rc_in_another_folder_is_never_killed() {
 #[test]
 fn preview_lists_the_foreign_pid_and_never_stops_our_own_child() {
     let env = setup("preview");
-    let id = env.manager.add(instance(&env.folder, false)).unwrap();
+    let id = env.manager.add(instance(&env, false)).unwrap();
     env.manager.start(&id).unwrap();
     assert!(
         wait_for(Duration::from_secs(20), || running(&env.manager, &id)),

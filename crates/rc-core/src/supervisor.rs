@@ -74,6 +74,8 @@ enum Outcome {
 /// Thread body. Returns when stop is requested or when the folder needs trust.
 pub fn run(shared: Arc<Shared>, job: Job) {
     let mut backoff = Backoff::default();
+    let mut budget = takeover::Budget::default();
+    let mut last_risk: Option<String> = None;
     loop {
         let started = Instant::now();
         let outcome = run_once(&shared, &job);
@@ -85,12 +87,24 @@ pub fn run(shared: Arc<Shared>, job: Job) {
                 return;
             }
             Outcome::Busy if job.cfg.force_boot => {
+                if !budget.allow(Instant::now()) {
+                    let by = last_risk.as_deref().unwrap_or("an unknown parent");
+                    let mut live = shared.live();
+                    live.status.state = State::Error;
+                    live.status.last_error = Some(format!(
+                        "foreign rc keeps coming back (respawned by {by}) — disable it"
+                    ));
+                    return;
+                }
                 let taken = takeover::take_over(&job.cfg.folder);
-                if let Some(risk) = &taken.respawn_risk {
+                if let Some(risk) = taken.respawn_risk {
                     eprintln!(
                         "rc-core: {} may respawn a stopped rc: {risk}",
                         job.cfg.folder.display()
                     );
+                    shared.live().status.last_error =
+                        Some(format!("took over folder; respawn risk: {risk}"));
+                    last_risk = Some(risk);
                 }
                 if taken.stopped.is_empty() {
                     (State::FolderBusy, backoff.next_delay(ran_for))

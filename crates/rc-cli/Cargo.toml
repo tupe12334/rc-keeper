@@ -25,3 +25,10 @@ libc = "0.2"
 
 [dev-dependencies]
 assert_cmd = "2"
+
+# Stand-in for `claude` in the CLI tests. Shares the source of rc-core's fake. Not installed.
+[[bin]]
+name = "fake-claude-cli"
+path = "../rc-core/tests/fixtures/fake_claude.rs"
+test = false
+doc = false

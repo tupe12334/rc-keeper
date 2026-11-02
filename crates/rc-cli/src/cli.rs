@@ -75,9 +75,12 @@ pub enum Command {
     Start {
         #[command(flatten)]
         target: Target,
-        /// Stop the other `claude remote-control` in the folder first, then start. Not with --all.
+        /// Kills the other claude remote-control in the folder (SIGTERM, then SIGKILL after 5 s), then starts. Destructive. Not with --all.
         #[arg(long)]
         force: bool,
+        /// Skip the confirmation prompt for --force. Required when no terminal is attached.
+        #[arg(long, requires = "force")]
+        yes: bool,
     },
     /// Stop an instance, or all with --all
     Stop {
@@ -221,7 +224,7 @@ pub struct InstanceFlags {
     /// Do not start this instance with the daemon. Start it with `rc-keeper start`. Not passed to `claude`.
     #[arg(long)]
     pub no_auto_start: bool,
-    /// When another `claude remote-control` serves the folder, stop it and start this instance. Not passed to `claude`.
+    /// When another `claude remote-control` serves the folder, stop it and start this instance. Kills without asking. Not passed to `claude`.
     #[arg(long, conflicts_with = "no_force_boot")]
     pub force_boot: bool,
     /// Back off when the folder is busy instead of taking it over. Off by default. Not passed to `claude`.
@@ -319,9 +322,9 @@ fn dispatch(command: Command) -> Result<()> {
         Command::Add { folder, flags } => commands::instances::add(&folder, &flags),
         Command::Edit { selector, flags } => commands::instances::edit(&selector, &flags),
         Command::Remove { selector } => commands::instances::remove(&selector),
-        Command::Start { target, force } => {
+        Command::Start { target, force, yes } => {
             if force {
-                commands::control::force_start(&target)
+                commands::control::force_start(&target, yes)
             } else {
                 commands::control::run(Action::Start, &target)
             }

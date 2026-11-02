@@ -1,7 +1,9 @@
 //! start, stop, restart for one instance or --all.
 
+use std::io::{IsTerminal, Write};
+
 use anyhow::{bail, Result};
-use serde_json::json;
+use serde_json::{json, Value};
 
 use super::{connect, fetch_views, resolve};
 use crate::cli::Target;
@@ -51,8 +53,9 @@ pub fn run(action: Action, target: &Target) -> Result<()> {
     Ok(())
 }
 
-/// `start --force`: stops the other claude rc in the folder, then starts the instance.
-pub fn force_start(target: &Target) -> Result<()> {
+/// `start --force`: previews what it stops, asks first unless `yes`, then stops the other claude
+/// rc in the folder and starts the instance.
+pub fn force_start(target: &Target, yes: bool) -> Result<()> {
     if target.all {
         bail!("--force takes one instance, not --all")
     }
@@ -61,13 +64,41 @@ pub fn force_start(target: &Target) -> Result<()> {
     };
     let mut client = connect()?;
     let id = resolve(&mut client, selector)?.config.id;
+    let preview = client.call("preview_force_start", json!({ "id": id }))?;
+    let pids: Vec<u64> = preview["stopped"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_u64)
+        .collect();
+    let risk = preview["respawnRisk"].as_str().map(str::to_owned);
+    if !pids.is_empty() {
+        for pid in &pids {
+            println!("will stop pid {pid}");
+        }
+        if let Some(risk) = &risk {
+            eprintln!("warning: a supervisor may start the stopped rc again: {risk}. Disable it, or the folder is taken again.");
+        }
+        if !yes && !confirm(&format!("Stop these processes and start {id}?"))? {
+            bail!("cancelled; nothing stopped")
+        }
+    }
     let taken = client.call("force_start", json!({ "id": id }))?;
     for pid in taken["stopped"].as_array().into_iter().flatten() {
         println!("stopped pid {pid}");
     }
-    if let Some(risk) = taken["respawnRisk"].as_str() {
-        eprintln!("warning: a supervisor may start the stopped rc again: {risk}. Disable it, or the folder is taken again.");
-    }
     println!("started {id}");
     Ok(())
+}
+
+/// Asks on stderr and reads the answer from stdin. Errors when no terminal is attached.
+fn confirm(question: &str) -> Result<bool> {
+    if !std::io::stdin().is_terminal() {
+        bail!("no terminal to confirm on; pass --yes to stop without asking")
+    }
+    eprint!("{question} [y/N] ");
+    std::io::stderr().flush()?;
+    let mut answer = String::new();
+    std::io::stdin().read_line(&mut answer)?;
+    Ok(matches!(answer.trim(), "y" | "Y" | "yes" | "YES"))
 }
