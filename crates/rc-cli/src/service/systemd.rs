@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use super::{exe, print_daemon_state, run_cmd, service_dir, write_file};
 
@@ -49,12 +49,30 @@ pub fn install(dry_run: bool) -> Result<()> {
     if dry_run {
         println!("dry run: skipped systemctl");
     } else {
-        run_cmd("systemctl", &["--user", "daemon-reload"])?;
+        if let Err(e) = run_cmd("systemctl", &["--user", "daemon-reload"]) {
+            if is_not_found(&e) {
+                bail!(
+                    "no systemctl on this host (a container, WSL1, or a non-systemd init).\n\
+                     The unit is at {}, for use on a systemd host.\n\
+                     Here, keep the daemon running with your init system, or for now:\n  \
+                     nohup '{}' daemon >/dev/null 2>&1 &",
+                    path.display(),
+                    exe()?.display()
+                );
+            }
+            return Err(e);
+        }
         run_cmd("systemctl", &["--user", "enable", "--now", UNIT_FILE])?;
     }
     let user = std::env::var("USER").unwrap_or_else(|_| "$USER".into());
     println!("To run without a login session, run:\n  loginctl enable-linger {user}");
     Ok(())
+}
+
+/// True when the command itself is missing, not when it ran and failed.
+fn is_not_found(e: &anyhow::Error) -> bool {
+    e.downcast_ref::<std::io::Error>()
+        .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound)
 }
 
 pub fn uninstall(dry_run: bool) -> Result<()> {
@@ -89,6 +107,17 @@ pub fn status() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{exec_start, unit_text};
+
+    #[cfg(unix)] // uses `false`
+    #[test]
+    fn missing_command_is_not_found_but_failed_command_is_not() {
+        use super::is_not_found;
+        use crate::service::run_cmd;
+        assert!(is_not_found(
+            &run_cmd("rc-keeper-no-such-cmd-7f3a", &[]).unwrap_err()
+        ));
+        assert!(!is_not_found(&run_cmd("false", &[]).unwrap_err()));
+    }
     use std::path::Path;
 
     #[test]
