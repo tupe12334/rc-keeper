@@ -14,7 +14,9 @@ use serde_json::{json, Value};
 
 use crate::client::{Client, ForeignDaemon};
 use crate::method::Method;
-use crate::paths::{canonical_config_dir, config_dir, socket_name, socket_path};
+#[cfg(unix)]
+use crate::paths::socket_path;
+use crate::paths::{canonical_config_dir, config_dir, socket_name};
 use crate::protocol::{Request, Response};
 use crate::schema::{CfgParams, GetSettingsResult, IdParams, PingResult, SetSettingsParams};
 
