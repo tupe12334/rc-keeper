@@ -61,3 +61,5 @@ New crates (one owner each):
 - Releases ship: GUI bundles per OS **and** standalone CLI archives `rc-keeper-<target>.tar.gz` / `.zip` (x86_64 + aarch64 Linux, universal macOS, x86_64 Windows). `install.sh --cli` (auto when no `$DISPLAY`/`$WAYLAND_DISPLAY` on Linux) installs only the CLI to `~/.local/bin`.
 - Extra GUI-only Tauri commands: `daemon_info() -> {version: string, running: boolean}` (IPC `ping`) and `stop_daemon()` (IPC `shutdown`).
 - Allowed values: permissionMode ∈ `acceptEdits|auto|bypassPermissions|default|dontAsk|plan`; spawn ∈ `same-dir|worktree|session` (from `claude remote-control --help`, v2.1.316).
+- CLI daemon group: `rc-keeper daemon` / `daemon run` (foreground), `daemon stop` (IPC `shutdown`; exit 0 also when not running), `daemon status [--json]` (exit 0 running, 2 not running).
+- Every crate `Cargo.toml` and `src-tauri/Cargo.toml` uses a literal `version = "x.y.z"` (no `version.workspace`), so release-please can bump it.
