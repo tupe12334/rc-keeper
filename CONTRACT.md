@@ -6,39 +6,11 @@ Layout (each folder has one owner):
 - `ui/` — React + TS + Vite + Tailwind + shadcn. Builds to `ui/dist`.
 - `.github/`, `install.sh`, `install.ps1`, `LICENSE`, README body — CI, release, install.
 
-## rc-core public API (serde camelCase)
-```rust
-pub struct InstanceConfig { pub id: String, pub folder: PathBuf, pub name: Option<String>, pub chrome: bool,
-  pub permission_mode: Option<String>, pub spawn: Option<String>, pub capacity: Option<u32>,
-  pub create_session_in_dir: Option<bool>, pub session_name_prefix: Option<String>,
-  pub extra_args: Vec<String>, pub auto_trust: bool, pub auto_start: bool }
-pub struct Settings { pub claude_bin: Option<PathBuf> }
-pub struct AppConfig { pub settings: Settings, pub instances: Vec<InstanceConfig> }
-#[serde(rename_all = "kebab-case")]
-pub enum State { Stopped, Starting, Running, Restarting, FolderBusy, NeedsTrust, Error }
-pub struct InstanceStatus { pub id: String, pub state: State, pub pid: Option<u32>, pub sessions: u32,
-  pub uptime_secs: Option<u64>, pub restarts: u32, pub next_retry_secs: Option<u64>,
-  pub last_error: Option<String>, pub session_urls: Vec<String> }
-pub struct InstanceView { pub config: InstanceConfig, pub status: InstanceStatus }
-
-pub fn build_args(cfg: &InstanceConfig) -> Vec<String>;      // ["remote-control", ...flags]
-pub fn find_claude_bin(settings: &Settings) -> Option<PathBuf>;
-
-impl Manager {               // Send + Sync, cheap to clone (Arc inside)
-  pub fn load(config_dir: PathBuf) -> Manager;        // reads config.json, starts auto_start instances
-  pub fn list(&self) -> Vec<InstanceView>;
-  pub fn add(&self, cfg: InstanceConfig) -> Result<String, String>;   // empty id → generated; returns id
-  pub fn update(&self, cfg: InstanceConfig) -> Result<(), String>;    // restarts if running
-  pub fn remove(&self, id: &str) -> Result<(), String>;               // stops first
-  pub fn start(&self, id: &str) -> Result<(), String>;
-  pub fn stop(&self, id: &str) -> Result<(), String>;
-  pub fn restart(&self, id: &str) -> Result<(), String>;
-  pub fn logs(&self, id: &str) -> Vec<String>;                        // last 500 lines, ANSI stripped
-  pub fn settings(&self) -> Settings;  pub fn set_settings(&self, s: Settings) -> Result<(), String>;
-  pub fn start_all(&self); pub fn stop_all(&self); pub fn shutdown(&self);  // shutdown: kill children, no orphans
-}
-```
-The Manager writes `<config_dir>/status.json` (Vec<InstanceView>) every 2 s.
+## rc-core public API
+Signatures and doc comments are generated. Run `cargo doc -p rc-core --no-deps` and open `target/doc/rc_core/index.html`.
+- Serde shapes use camelCase. The exception is `State`, which uses kebab-case.
+- The Manager writes `<config_dir>/status.json` (a `Vec<InstanceView>`) every 2 s.
+- The IPC wire types are in the [IPC reference](docs/reference/ipc.md).
 
 ## Tauri commands (names the UI invokes; args camelCase)
 Tauri commands mirror the IPC method names. Signatures: see the [IPC reference](docs/reference/ipc.md).
