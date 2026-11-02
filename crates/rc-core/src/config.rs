@@ -2,7 +2,7 @@
 //! `settings.json` (shared), `settings.local.json` (machine-only), `instances/<id>.json`, `.gitignore`.
 //! Every file is written with fixed bytes, and only when those bytes change.
 use crate::model::{AppConfig, InstanceConfig, Settings};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
@@ -19,6 +19,84 @@ const SHARED_SETTINGS: &[u8] = b"{}\n";
 const GITIGNORE: &str =
     "settings.local.json\nstatus.json\ndaemon.log\nrc-keeper.sock\n*.tmp\nconfig.json.migrated\n";
 
+/// On-disk shape of `instances/<id>.json`. Same keys in the same order as `InstanceConfig`,
+/// with `None` fields omitted. A separate type, so IPC keeps sending `null` for unset fields.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct InstanceFile {
+    id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    folder: PathBuf,
+    auto_start: bool,
+    auto_trust: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    capacity: Option<u32>,
+    chrome: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    create_session_in_dir: Option<bool>,
+    extra_args: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    permission_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    session_name_prefix: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    spawn: Option<String>,
+}
+
+// Destructuring (no `..`) makes a new InstanceConfig field a compile error here until it is stored.
+impl From<&InstanceConfig> for InstanceFile {
+    fn from(cfg: &InstanceConfig) -> Self {
+        let InstanceConfig {
+            id,
+            name,
+            folder,
+            auto_start,
+            auto_trust,
+            capacity,
+            chrome,
+            create_session_in_dir,
+            extra_args,
+            permission_mode,
+            session_name_prefix,
+            spawn,
+        } = cfg;
+        InstanceFile {
+            id: id.clone(),
+            name: name.clone(),
+            folder: folder.clone(),
+            auto_start: *auto_start,
+            auto_trust: *auto_trust,
+            capacity: *capacity,
+            chrome: *chrome,
+            create_session_in_dir: *create_session_in_dir,
+            extra_args: extra_args.clone(),
+            permission_mode: permission_mode.clone(),
+            session_name_prefix: session_name_prefix.clone(),
+            spawn: spawn.clone(),
+        }
+    }
+}
+
+impl From<InstanceFile> for InstanceConfig {
+    fn from(f: InstanceFile) -> Self {
+        InstanceConfig {
+            id: f.id,
+            name: f.name,
+            folder: f.folder,
+            auto_start: f.auto_start,
+            auto_trust: f.auto_trust,
+            capacity: f.capacity,
+            chrome: f.chrome,
+            create_session_in_dir: f.create_session_in_dir,
+            extra_args: f.extra_args,
+            permission_mode: f.permission_mode,
+            session_name_prefix: f.session_name_prefix,
+            spawn: f.spawn,
+        }
+    }
+}
+
 /// What `load` found on disk. `broken` maps an id to its parse error.
 #[derive(Default)]
 pub struct Loaded {
@@ -26,10 +104,14 @@ pub struct Loaded {
     pub broken: BTreeMap<String, String>,
 }
 
+/// `USERPROFILE` on Windows, since Git Bash and MSYS also set `HOME` to a path Windows cannot use.
 pub fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
+    let vars: &[&str] = if cfg!(windows) {
+        &["USERPROFILE", "HOME"]
+    } else {
+        &["HOME"]
+    };
+    vars.iter().find_map(std::env::var_os).map(PathBuf::from)
 }
 
 /// Stores a folder under `home` as `~/...` with `/` separators. Other paths stay as they are.
@@ -59,7 +141,7 @@ pub fn from_portable(folder: &Path, home: Option<&Path>) -> PathBuf {
     }
 }
 
-/// Slug of the folder's last segment. Empty names become `instance`.
+/// Slug of the folder's last segment. Empty names become `instance`, and Windows device names get a suffix.
 pub fn slug_of(folder: &Path) -> String {
     let name = folder.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let mut slug = String::new();
@@ -75,9 +157,20 @@ pub fn slug_of(folder: &Path) -> String {
     }
     if slug.is_empty() {
         "instance".to_owned()
+    } else if is_windows_device(&slug) {
+        format!("{slug}-instance")
     } else {
         slug
     }
+}
+
+/// `con`, `nul`, `com1`..`com9` and `lpt1`..`lpt9` cannot be file names on Windows.
+fn is_windows_device(slug: &str) -> bool {
+    let bytes = slug.as_bytes();
+    matches!(slug, "con" | "prn" | "aux" | "nul")
+        || (bytes.len() == 4
+            && (slug.starts_with("com") || slug.starts_with("lpt"))
+            && (b'1'..=b'9').contains(&bytes[3]))
 }
 
 /// `base`, or `base-2`, `base-3`... for the first free name.
@@ -151,8 +244,9 @@ pub fn load(dir: &Path, home: Option<&Path>) -> Loaded {
 fn read_instance(path: &Path, id: &str, home: Option<&Path>) -> Result<InstanceConfig, String> {
     let file = path.file_name().unwrap_or_default().to_string_lossy();
     let bytes = fs::read(path).map_err(|e| format!("cannot read {INSTANCES_DIR}/{file}: {e}"))?;
-    let mut cfg: InstanceConfig = serde_json::from_slice(&bytes)
+    let stored: InstanceFile = serde_json::from_slice(&bytes)
         .map_err(|e| format!("invalid {INSTANCES_DIR}/{file}: {e}"))?;
+    let mut cfg = InstanceConfig::from(stored);
     if cfg.id.is_empty() {
         cfg.id = id.to_owned();
     } else if cfg.id != id {
@@ -174,7 +268,7 @@ pub fn save_instance(dir: &Path, cfg: &InstanceConfig, home: Option<&Path>) -> R
     if !valid_id(&cfg.id) {
         return Err(format!("invalid instance id \"{}\"", cfg.id));
     }
-    let mut stored = cfg.clone();
+    let mut stored = InstanceFile::from(cfg);
     stored.folder = to_portable(&cfg.folder, home);
     write_if_changed(&instance_path(dir, &cfg.id), &to_json(&stored)?)
 }
@@ -197,6 +291,8 @@ pub fn ensure_gitignore(dir: &Path) -> Result<(), String> {
 }
 
 /// Splits a legacy single `config.json` into the new layout, then renames it to `config.json.migrated`.
+/// Safe to re-run: a legacy folder that already has an instance file is skipped, and an existing
+/// `config.json.migrated` is never overwritten.
 pub fn migrate_legacy(dir: &Path, home: Option<&Path>) -> Result<(), String> {
     let legacy = dir.join(LEGACY_FILE);
     if !legacy.exists() {
@@ -205,13 +301,29 @@ pub fn migrate_legacy(dir: &Path, home: Option<&Path>) -> Result<(), String> {
     let bytes = fs::read(&legacy).map_err(|e| format!("cannot read {LEGACY_FILE}: {e}"))?;
     let old: AppConfig = serde_json::from_slice(&bytes)
         .map_err(|e| format!("cannot migrate {LEGACY_FILE}, left in place: {e}"))?;
-    save_settings(dir, &old.settings)?;
+    if !dir.join(LOCAL_SETTINGS_FILE).exists() {
+        save_settings(dir, &old.settings)?;
+    }
+    let mut present: Vec<PathBuf> = load(dir, home)
+        .config
+        .instances
+        .iter()
+        .map(|c| to_portable(&c.folder, home))
+        .collect();
     for mut cfg in old.instances {
+        let portable = to_portable(&cfg.folder, home);
+        if present.contains(&portable) {
+            continue;
+        }
         // Legacy ids were random. New ids come from the folder and never collide with a file on disk.
         cfg.id = unique_id(&slug_of(&cfg.folder), |id| instance_exists(dir, id));
         save_instance(dir, &cfg, home)?;
+        present.push(portable);
     }
     ensure_gitignore(dir)?;
+    if dir.join(MIGRATED_FILE).exists() {
+        return Ok(());
+    }
     fs::rename(&legacy, dir.join(MIGRATED_FILE))
         .map_err(|e| format!("cannot rename {LEGACY_FILE}: {e}"))
 }
@@ -274,6 +386,9 @@ mod tests {
     fn slugs_and_collisions() {
         assert_eq!(slug_of(Path::new("/a/My Project_v2")), "my-project-v2");
         assert_eq!(slug_of(Path::new("/")), "instance");
+        assert_eq!(slug_of(Path::new("/a/con")), "con-instance");
+        assert_eq!(slug_of(Path::new("/a/COM1")), "com1-instance");
+        assert_eq!(slug_of(Path::new("/a/com10")), "com10");
         let taken = ["app", "app-2"];
         assert_eq!(unique_id("app", |id| taken.contains(&id)), "app-3");
         assert_eq!(unique_id("web", |id| taken.contains(&id)), "web");

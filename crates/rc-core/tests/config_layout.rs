@@ -127,6 +127,7 @@ fn two_edits_change_only_two_files() {
     assert_eq!(read(&dir, "settings.json"), settings_before);
 }
 
+#[cfg(unix)]
 #[test]
 fn tilde_folder_round_trips_on_disk() {
     let home = PathBuf::from(std::env::var_os("HOME").expect("HOME is set"));
@@ -274,4 +275,106 @@ fn gitignore_is_written_once_and_never_overwritten() {
     fs::write(dir.join(".gitignore"), "custom\n").unwrap();
     let _again = Manager::load(dir.clone());
     assert_eq!(read(&dir, ".gitignore"), "custom\n");
+}
+
+fn ids(m: &Manager) -> Vec<String> {
+    m.list().into_iter().map(|v| v.config.id).collect()
+}
+
+#[test]
+fn list_json_keeps_null_for_unset_fields() {
+    let dir = fresh_dir("ipc-null");
+    let m = Manager::load(dir);
+    m.add(inst("/srv/nulls")).unwrap();
+    let json = serde_json::to_string(&m.list()).unwrap();
+    assert!(json.contains("\"name\":null"), "{json}");
+    assert!(json.contains("\"permissionMode\":null"), "{json}");
+}
+
+#[test]
+fn legacy_shared_folder_name_gets_suffix() {
+    let dir = fresh_dir("migrate-same-name");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("config.json"),
+        r#"{"instances":[{"id":"x1","folder":"/srv/a/app"},{"id":"x2","folder":"/srv/b/app"}]}"#,
+    )
+    .unwrap();
+    let m = Manager::load(dir);
+    let folder_of = |id: &str| {
+        m.list()
+            .into_iter()
+            .find(|v| v.config.id == id)
+            .unwrap()
+            .config
+            .folder
+    };
+    assert_eq!(folder_of("app"), PathBuf::from("/srv/a/app"));
+    assert_eq!(folder_of("app-2"), PathBuf::from("/srv/b/app"));
+}
+
+#[test]
+fn migration_rerun_after_partial_failure_does_not_duplicate() {
+    let dir = fresh_dir("migrate-rerun");
+    fs::create_dir_all(dir.join("instances")).unwrap();
+    // The first write of an interrupted run landed. config.json is still in place.
+    let alpha = "{\n  \"id\": \"alpha\",\n  \"folder\": \"/srv/projects/alpha\",\n  \"autoStart\": false,\n  \"autoTrust\": false,\n  \"chrome\": false,\n  \"extraArgs\": []\n}\n";
+    fs::write(dir.join("instances/alpha.json"), alpha).unwrap();
+    fs::write(
+        dir.join("config.json"),
+        r#"{"instances":[{"id":"a","folder":"/srv/projects/alpha"},{"id":"b","folder":"/srv/projects/beta"}]}"#,
+    )
+    .unwrap();
+
+    let m = Manager::load(dir.clone());
+    assert_eq!(ids(&m), ["alpha", "beta"]);
+    assert_eq!(read(&dir, "instances/alpha.json"), alpha);
+    assert!(dir.join("config.json.migrated").exists());
+}
+
+#[test]
+fn restored_legacy_file_is_absorbed_without_overwriting_migrated() {
+    let dir = fresh_dir("migrate-restored");
+    fs::create_dir_all(&dir).unwrap();
+    let legacy = r#"{"instances":[{"id":"a","folder":"/srv/projects/alpha"},{"id":"b","folder":"/srv/projects/beta"}]}"#;
+    fs::write(dir.join("config.json"), legacy).unwrap();
+    let first = Manager::load(dir.clone());
+    assert_eq!(ids(&first), ["alpha", "beta"]);
+    let migrated = read(&dir, "config.json.migrated");
+    drop(first);
+
+    // An old-version machine pushes config.json back through git.
+    fs::write(dir.join("config.json"), legacy).unwrap();
+    let again = Manager::load(dir.clone());
+    assert_eq!(ids(&again), ["alpha", "beta"]);
+    assert_eq!(read(&dir, "config.json.migrated"), migrated);
+}
+
+#[test]
+fn replaced_config_dir_is_reloaded_and_watched_again() {
+    let root = fresh_dir("dir-replace");
+    let dir = root.join("cfg");
+    let m = Manager::load(dir.clone());
+    m.add(inst("/srv/old")).unwrap();
+
+    // Move the live dir aside, then rename a fully written sibling dir into its place.
+    let staged = root.join("cfg.staged");
+    fs::create_dir_all(staged.join("instances")).unwrap();
+    fs::write(
+        staged.join("instances/new.json"),
+        "{\n  \"id\": \"new\",\n  \"folder\": \"/srv/new\"\n}\n",
+    )
+    .unwrap();
+    fs::rename(&dir, root.join("cfg.old")).unwrap();
+    fs::rename(&staged, &dir).unwrap();
+
+    assert!(within_two_seconds(|| ids(&m) == ["new"]), "{:?}", ids(&m));
+
+    // The watch now follows the new inode, so later edits arrive too.
+    fs::write(
+        dir.join("instances/later.json"),
+        "{\n  \"id\": \"later\",\n  \"folder\": \"/srv/later\"\n}\n",
+    )
+    .unwrap();
+    assert!(within_two_seconds(|| ids(&m).contains(&"later".to_owned())));
 }

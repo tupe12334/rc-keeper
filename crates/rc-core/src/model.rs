@@ -2,27 +2,20 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Field order is the order of the keys in `instances/<id>.json`. Keep it stable.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct InstanceConfig {
     pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub folder: PathBuf,
     pub auto_start: bool,
     pub auto_trust: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub capacity: Option<u32>,
     pub chrome: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub create_session_in_dir: Option<bool>,
     pub extra_args: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub permission_mode: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub session_name_prefix: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub spawn: Option<String>,
 }
 

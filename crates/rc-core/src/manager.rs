@@ -30,7 +30,8 @@ struct Inner {
 #[derive(Default)]
 struct Registry {
     config: AppConfig,
-    /// Instance files that do not parse, by id. The message becomes the `error` state.
+    /// Instance files that do not parse, by id, with the parse error. A known id that is also
+    /// here keeps its last good config and its process, and shows the error as `last_error`.
     broken: BTreeMap<String, String>,
     runs: HashMap<String, Arc<Shared>>,
 }
@@ -88,32 +89,49 @@ impl Manager {
 
     pub fn list(&self) -> Vec<InstanceView> {
         let reg = self.reg();
-        let valid = reg.config.instances.iter().filter_map(|cfg| {
-            let shared = reg.runs.get(&cfg.id)?;
-            let live = shared.live();
-            let mut status = live.status.clone();
-            status.uptime_secs = live
-                .started_at
-                .filter(|_| status.pid.is_some())
-                .map(|t| t.elapsed().as_secs());
-            Some(InstanceView {
-                config: cfg.clone(),
-                status,
+        let mut views: Vec<InstanceView> = reg
+            .config
+            .instances
+            .iter()
+            .filter_map(|cfg| {
+                let shared = reg.runs.get(&cfg.id)?;
+                let live = shared.live();
+                let mut status = live.status.clone();
+                status.uptime_secs = live
+                    .started_at
+                    .filter(|_| status.pid.is_some())
+                    .map(|t| t.elapsed().as_secs());
+                if let Some(message) = reg.broken.get(&cfg.id) {
+                    status.last_error = Some(message.clone());
+                    let running = live.thread.as_ref().is_some_and(|t| !t.is_finished());
+                    if !running {
+                        status.state = State::Error;
+                    }
+                }
+                Some(InstanceView {
+                    config: cfg.clone(),
+                    status,
+                })
             })
-        });
-        let broken = reg.broken.iter().map(|(id, message)| InstanceView {
-            config: InstanceConfig {
-                id: id.clone(),
-                ..Default::default()
-            },
-            status: InstanceStatus {
-                id: id.clone(),
-                state: State::Error,
-                last_error: Some(message.clone()),
-                ..Default::default()
-            },
-        });
-        valid.chain(broken).collect()
+            .collect();
+        views.extend(
+            reg.broken
+                .iter()
+                .filter(|(id, _)| !reg.config.instances.iter().any(|c| c.id == **id))
+                .map(|(id, message)| InstanceView {
+                    config: InstanceConfig {
+                        id: id.clone(),
+                        ..Default::default()
+                    },
+                    status: InstanceStatus {
+                        id: id.clone(),
+                        state: State::Error,
+                        last_error: Some(message.clone()),
+                        ..Default::default()
+                    },
+                }),
+        );
+        views
     }
 
     /// Writes the instance file. An empty id is generated from the folder name.
@@ -152,8 +170,17 @@ impl Manager {
 
     /// Stops the instance, then deletes its file. A broken file is deleted without a stop.
     pub fn remove(&self, id: &str) -> Result<(), String> {
-        let broken = self.reg().broken.contains_key(id);
-        if !broken {
+        let (known, broken) = {
+            let reg = self.reg();
+            (
+                reg.config.instances.iter().any(|c| c.id == id),
+                reg.broken.contains_key(id),
+            )
+        };
+        if !known && !broken {
+            return Err(unknown(id));
+        }
+        if known {
             self.stop(id)?;
         }
         let mut reg = self.reg();
@@ -168,9 +195,10 @@ impl Manager {
     pub fn start(&self, id: &str) -> Result<(), String> {
         let (cfg, shared, settings) = {
             let reg = self.reg();
-            if let Some(message) = reg.broken.get(id) {
+            if let Some(message) = reg.broken.get(id).filter(|_| !running_in(&reg, id)) {
                 return Err(message.clone());
             }
+            let shared = reg.runs.get(id).ok_or_else(|| unknown(id))?.clone();
             let cfg = reg
                 .config
                 .instances
@@ -178,7 +206,6 @@ impl Manager {
                 .find(|c| c.id == id)
                 .ok_or_else(|| unknown(id))?
                 .clone();
-            let shared = reg.runs.get(id).ok_or_else(|| unknown(id))?.clone();
             (cfg, shared, reg.config.settings.clone())
         };
         // Lock order: lifecycle, then live.
@@ -207,20 +234,7 @@ impl Manager {
     /// Stops the instance and waits until its child is gone.
     pub fn stop(&self, id: &str) -> Result<(), String> {
         let shared = self.shared(id)?;
-        // Held for the whole call, so a concurrent start cannot clear the stop flag early.
-        let _lifecycle = shared.lifecycle();
-        shared.stop.store(true, Ordering::SeqCst);
-        // Take the handle out first, so the live lock is free while the thread finishes.
-        let worker = shared.live().thread.take();
-        if let Some(worker) = worker {
-            let _ = worker.join();
-        }
-        let mut live = shared.live();
-        live.status.state = State::Stopped;
-        live.status.pid = None;
-        live.status.sessions = 0;
-        live.status.next_retry_secs = None;
-        live.started_at = None;
+        stop_shared(&shared);
         Ok(())
     }
 
@@ -280,51 +294,57 @@ impl Manager {
     }
 
     /// Applies the files on disk to the registry. The watcher calls this after a quiet period.
-    /// The daemon's own writes need no filter: their content already matches the registry, so nothing changes.
+    ///
+    /// One lock covers the read, the diff and the apply, so an add or update cannot slip between them.
+    /// Stops and starts run after the lock is released, because they lock the registry themselves.
+    /// Reload never writes files, so the daemon's own writes cause no further reload.
     fn reload(&self) {
-        // The disk is read under the lock, so an edit made through this Manager is never reverted.
-        let mut stop = Vec::new();
-        let mut restart = Vec::new();
-        let mut autostart = Vec::new();
-        let fresh = {
-            let reg = self.reg();
+        let mut to_stop: Vec<Arc<Shared>> = Vec::new();
+        let mut to_start: Vec<String> = Vec::new();
+        {
+            let mut reg = self.reg();
             let fresh = config::load(&self.inner.dir, self.home());
+            let mut instances = fresh.config.instances.clone();
             for cfg in &reg.config.instances {
-                let running = running_in(&reg, &cfg.id);
                 match fresh.config.instances.iter().find(|c| c.id == cfg.id) {
-                    Some(new) if new == cfg => {}
-                    Some(_) if running => {
-                        stop.push(cfg.id.clone());
-                        restart.push(cfg.id.clone());
+                    Some(new) => {
+                        // Changed and running: stop the old process, then start with the new config.
+                        if new != cfg && running_in(&reg, &cfg.id) {
+                            to_stop.extend(reg.runs.get(&cfg.id).cloned());
+                            to_start.push(cfg.id.clone());
+                        }
                     }
-                    None if running => stop.push(cfg.id.clone()),
-                    _ => {}
+                    None if fresh.broken.contains_key(&cfg.id) => {
+                        // Possibly a read caught mid-write. Keep the last good config and the process.
+                        instances.push(cfg.clone());
+                    }
+                    None => {
+                        // The file is gone: the instance is removed.
+                        to_stop.extend(reg.runs.get(&cfg.id).cloned());
+                    }
                 }
             }
             for cfg in &fresh.config.instances {
                 let known = reg.config.instances.iter().any(|c| c.id == cfg.id);
                 if cfg.auto_start && !known {
-                    autostart.push(cfg.id.clone());
+                    to_start.push(cfg.id.clone());
                 }
             }
-            fresh
-        };
-        for id in &stop {
-            let _ = self.stop(id);
-        }
-        {
-            let mut reg = self.reg();
             reg.runs
-                .retain(|id, _| fresh.config.instances.iter().any(|c| c.id == *id));
-            for cfg in &fresh.config.instances {
+                .retain(|id, _| instances.iter().any(|c| c.id == *id));
+            for cfg in &instances {
                 reg.runs
                     .entry(cfg.id.clone())
                     .or_insert_with(|| Arc::new(Shared::new(&cfg.id)));
             }
-            reg.config = fresh.config;
+            reg.config.instances = instances;
+            reg.config.settings = fresh.config.settings;
             reg.broken = fresh.broken;
         }
-        for id in restart.iter().chain(&autostart) {
+        for shared in &to_stop {
+            stop_shared(shared);
+        }
+        for id in &to_start {
             let _ = self.start(id);
         }
     }
@@ -364,6 +384,24 @@ impl Manager {
             eprintln!("rc-core: {e}");
         }
     }
+}
+
+/// Stops the instance and waits for its thread. Caller must not hold the registry lock.
+fn stop_shared(shared: &Shared) {
+    // Held for the whole call, so a concurrent start cannot clear the stop flag early.
+    let _lifecycle = shared.lifecycle();
+    shared.stop.store(true, Ordering::SeqCst);
+    // Take the handle out first, so the live lock is free while the thread finishes.
+    let worker = shared.live().thread.take();
+    if let Some(worker) = worker {
+        let _ = worker.join();
+    }
+    let mut live = shared.live();
+    live.status.state = State::Stopped;
+    live.status.pid = None;
+    live.status.sessions = 0;
+    live.status.next_retry_secs = None;
+    live.started_at = None;
 }
 
 /// Refreshes process data and publishes status every two seconds. Ends with the last Manager.
