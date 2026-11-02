@@ -119,6 +119,8 @@ pub enum ConfigCmd {
     Get,
     /// Set a value. Keys: claude-bin
     Set { key: String, value: String },
+    /// Print the config dir (RC_KEEPER_CONFIG_DIR overrides it)
+    Path,
 }
 
 #[derive(Subcommand)]
@@ -282,6 +284,7 @@ fn dispatch(command: Command) -> Result<()> {
         Command::Config { action } => match action {
             ConfigCmd::Get => commands::config::get(),
             ConfigCmd::Set { key, value } => commands::config::set(&key, &value),
+            ConfigCmd::Path => commands::config::path(),
         },
         Command::Service { action } => match action {
             ServiceCmd::Install { dry_run } => crate::service::install(dry_run),

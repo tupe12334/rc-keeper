@@ -8,6 +8,7 @@ mod model;
 mod parser;
 mod procs;
 mod supervisor;
+mod watch;
 
 pub use args::build_args;
 pub use locate::find_claude_bin;

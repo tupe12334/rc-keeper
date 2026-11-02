@@ -1,12 +1,13 @@
 //! Public entry point. Owns the instance registry, the supervisor threads and status.json.
-use crate::config::{CONFIG_FILE, read_config, write_config, write_status};
+use crate::config::{self, Loaded};
 use crate::locate::find_claude_bin;
-use crate::model::{AppConfig, InstanceConfig, InstanceView, Settings, State};
+use crate::model::{AppConfig, InstanceConfig, InstanceStatus, InstanceView, Settings, State};
 use crate::procs;
 use crate::supervisor::{self, Job, Shared};
-use std::collections::HashMap;
+use crate::watch;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::thread;
@@ -22,42 +23,33 @@ pub struct Manager {
 
 struct Inner {
     dir: PathBuf,
+    home: Option<PathBuf>,
     reg: Mutex<Registry>,
 }
 
 #[derive(Default)]
 struct Registry {
     config: AppConfig,
+    /// Instance files that do not parse, by id. The message becomes the `error` state.
+    broken: BTreeMap<String, String>,
     runs: HashMap<String, Arc<Shared>>,
 }
 
 impl Manager {
-    /// Reads `config.json` from `config_dir` and starts the instances with `auto_start`.
+    /// Reads the config dir, migrates a legacy `config.json`, watches the dir for edits,
+    /// and starts the instances with `auto_start`.
     pub fn load(config_dir: PathBuf) -> Manager {
         if let Err(e) = fs::create_dir_all(&config_dir) {
             eprintln!("rc-core: cannot create {}: {e}", config_dir.display());
         }
-        let mut config = read_config(&config_dir).unwrap_or_else(|e| {
-            eprintln!("rc-core: {e}; moved to config.json.bak");
-            let _ = fs::rename(
-                config_dir.join(CONFIG_FILE),
-                config_dir.join("config.json.bak"),
-            );
-            AppConfig::default()
-        });
-        let mut generated = false;
-        for cfg in &mut config.instances {
-            if cfg.id.is_empty() {
-                cfg.id = new_id();
-                generated = true;
-            }
+        let home = config::home_dir();
+        if let Err(e) = config::migrate_legacy(&config_dir, home.as_deref()) {
+            eprintln!("rc-core: {e}");
         }
-        if generated {
-            // Clients hold these ids, so they must survive a restart.
-            if let Err(e) = write_config(&config_dir, &config) {
-                eprintln!("rc-core: {e}");
-            }
+        if let Err(e) = config::ensure_gitignore(&config_dir) {
+            eprintln!("rc-core: {e}");
         }
+        let Loaded { config, broken } = config::load(&config_dir, home.as_deref());
         let runs = config
             .instances
             .iter()
@@ -65,12 +57,29 @@ impl Manager {
             .collect();
         let manager = Manager {
             inner: Arc::new(Inner {
-                dir: config_dir,
-                reg: Mutex::new(Registry { config, runs }),
+                dir: config_dir.clone(),
+                home,
+                reg: Mutex::new(Registry {
+                    config,
+                    broken,
+                    runs,
+                }),
             }),
         };
         let weak = Arc::downgrade(&manager.inner);
+        let alive = weak.clone();
         thread::spawn(move || tick(weak));
+        let watched = watch::spawn(config_dir, move || alive.strong_count() > 0, {
+            let weak = Arc::downgrade(&manager.inner);
+            move || {
+                if let Some(inner) = weak.upgrade() {
+                    Manager { inner }.reload();
+                }
+            }
+        });
+        if let Err(e) = watched {
+            eprintln!("rc-core: cannot watch the config dir: {e}");
+        }
         for id in manager.ids_where(|cfg| cfg.auto_start) {
             let _ = manager.start(&id);
         }
@@ -79,39 +88,47 @@ impl Manager {
 
     pub fn list(&self) -> Vec<InstanceView> {
         let reg = self.reg();
-        reg.config
-            .instances
-            .iter()
-            .filter_map(|cfg| {
-                let shared = reg.runs.get(&cfg.id)?;
-                let live = shared.live();
-                let mut status = live.status.clone();
-                status.uptime_secs = live
-                    .started_at
-                    .filter(|_| status.pid.is_some())
-                    .map(|t| t.elapsed().as_secs());
-                Some(InstanceView {
-                    config: cfg.clone(),
-                    status,
-                })
+        let valid = reg.config.instances.iter().filter_map(|cfg| {
+            let shared = reg.runs.get(&cfg.id)?;
+            let live = shared.live();
+            let mut status = live.status.clone();
+            status.uptime_secs = live
+                .started_at
+                .filter(|_| status.pid.is_some())
+                .map(|t| t.elapsed().as_secs());
+            Some(InstanceView {
+                config: cfg.clone(),
+                status,
             })
-            .collect()
+        });
+        let broken = reg.broken.iter().map(|(id, message)| InstanceView {
+            config: InstanceConfig {
+                id: id.clone(),
+                ..Default::default()
+            },
+            status: InstanceStatus {
+                id: id.clone(),
+                state: State::Error,
+                last_error: Some(message.clone()),
+                ..Default::default()
+            },
+        });
+        valid.chain(broken).collect()
     }
 
+    /// Writes the instance file. An empty id is generated from the folder name.
     pub fn add(&self, mut cfg: InstanceConfig) -> Result<String, String> {
-        if cfg.id.is_empty() {
-            cfg.id = new_id();
-        }
-        let id = cfg.id.clone();
         let mut reg = self.reg();
-        if reg.config.instances.iter().any(|c| c.id == id) {
-            return Err(format!("duplicate id {id}"));
+        if cfg.id.is_empty() {
+            let base = config::slug_of(&cfg.folder);
+            cfg.id = config::unique_id(&base, |id| self.taken(&reg, id));
+        } else if self.taken(&reg, &cfg.id) {
+            return Err(format!("duplicate id {}", cfg.id));
         }
-        self.edit_config(&mut reg, |config| {
-            config.instances.push(cfg);
-            Ok(())
-        })?;
+        config::save_instance(&self.inner.dir, &cfg, self.home())?;
+        let id = cfg.id.clone();
         reg.runs.insert(id.clone(), Arc::new(Shared::new(&id)));
+        reg.config.instances.push(cfg);
         Ok(id)
     }
 
@@ -121,27 +138,28 @@ impl Manager {
         let running = self.is_running(&id)?;
         {
             let mut reg = self.reg();
-            self.edit_config(&mut reg, |config| {
-                let slot = config
-                    .instances
-                    .iter_mut()
-                    .find(|c| c.id == id)
-                    .ok_or_else(|| unknown(&id))?;
-                *slot = cfg;
-                Ok(())
-            })?;
+            let slot = reg
+                .config
+                .instances
+                .iter()
+                .position(|c| c.id == id)
+                .ok_or_else(|| unknown(&id))?;
+            config::save_instance(&self.inner.dir, &cfg, self.home())?;
+            reg.config.instances[slot] = cfg;
         }
         if running { self.restart(&id) } else { Ok(()) }
     }
 
-    /// Stops the instance, then deletes it from the config.
+    /// Stops the instance, then deletes its file. A broken file is deleted without a stop.
     pub fn remove(&self, id: &str) -> Result<(), String> {
-        self.stop(id)?;
+        let broken = self.reg().broken.contains_key(id);
+        if !broken {
+            self.stop(id)?;
+        }
         let mut reg = self.reg();
-        self.edit_config(&mut reg, |config| {
-            config.instances.retain(|c| c.id != id);
-            Ok(())
-        })?;
+        config::remove_instance(&self.inner.dir, id)?;
+        reg.config.instances.retain(|c| c.id != id);
+        reg.broken.remove(id);
         reg.runs.remove(id);
         Ok(())
     }
@@ -150,6 +168,9 @@ impl Manager {
     pub fn start(&self, id: &str) -> Result<(), String> {
         let (cfg, shared, settings) = {
             let reg = self.reg();
+            if let Some(message) = reg.broken.get(id) {
+                return Err(message.clone());
+            }
             let cfg = reg
                 .config
                 .instances
@@ -221,10 +242,9 @@ impl Manager {
 
     pub fn set_settings(&self, settings: Settings) -> Result<(), String> {
         let mut reg = self.reg();
-        self.edit_config(&mut reg, |config| {
-            config.settings = settings;
-            Ok(())
-        })
+        config::save_settings(&self.inner.dir, &settings)?;
+        reg.config.settings = settings;
+        Ok(())
     }
 
     pub fn start_all(&self) {
@@ -248,6 +268,67 @@ impl Manager {
         self.inner.reg.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    fn home(&self) -> Option<&Path> {
+        self.inner.home.as_deref()
+    }
+
+    /// An id is taken by a loaded instance, a broken file, or any instance file on disk.
+    fn taken(&self, reg: &Registry, id: &str) -> bool {
+        reg.config.instances.iter().any(|c| c.id == id)
+            || reg.broken.contains_key(id)
+            || config::instance_exists(&self.inner.dir, id)
+    }
+
+    /// Applies the files on disk to the registry. The watcher calls this after a quiet period.
+    /// The daemon's own writes need no filter: their content already matches the registry, so nothing changes.
+    fn reload(&self) {
+        // The disk is read under the lock, so an edit made through this Manager is never reverted.
+        let mut stop = Vec::new();
+        let mut restart = Vec::new();
+        let mut autostart = Vec::new();
+        let fresh = {
+            let reg = self.reg();
+            let fresh = config::load(&self.inner.dir, self.home());
+            for cfg in &reg.config.instances {
+                let running = running_in(&reg, &cfg.id);
+                match fresh.config.instances.iter().find(|c| c.id == cfg.id) {
+                    Some(new) if new == cfg => {}
+                    Some(_) if running => {
+                        stop.push(cfg.id.clone());
+                        restart.push(cfg.id.clone());
+                    }
+                    None if running => stop.push(cfg.id.clone()),
+                    _ => {}
+                }
+            }
+            for cfg in &fresh.config.instances {
+                let known = reg.config.instances.iter().any(|c| c.id == cfg.id);
+                if cfg.auto_start && !known {
+                    autostart.push(cfg.id.clone());
+                }
+            }
+            fresh
+        };
+        for id in &stop {
+            let _ = self.stop(id);
+        }
+        {
+            let mut reg = self.reg();
+            reg.runs
+                .retain(|id, _| fresh.config.instances.iter().any(|c| c.id == *id));
+            for cfg in &fresh.config.instances {
+                reg.runs
+                    .entry(cfg.id.clone())
+                    .or_insert_with(|| Arc::new(Shared::new(&cfg.id)));
+            }
+            reg.config = fresh.config;
+            reg.broken = fresh.broken;
+        }
+        for id in restart.iter().chain(&autostart) {
+            let _ = self.start(id);
+        }
+    }
+
     fn shared(&self, id: &str) -> Result<Arc<Shared>, String> {
         self.reg().runs.get(id).cloned().ok_or_else(|| unknown(id))
     }
@@ -268,20 +349,6 @@ impl Manager {
             .collect()
     }
 
-    /// Applies `edit` to a copy of the config, saves it, then swaps it in.
-    /// The copy keeps memory and disk in step when the save fails.
-    fn edit_config(
-        &self,
-        reg: &mut Registry,
-        edit: impl FnOnce(&mut AppConfig) -> Result<(), String>,
-    ) -> Result<(), String> {
-        let mut next = reg.config.clone();
-        edit(&mut next)?;
-        write_config(&self.inner.dir, &next)?;
-        reg.config = next;
-        Ok(())
-    }
-
     /// Refreshes the session counts and rewrites status.json.
     fn publish(&self, sys: &sysinfo::System) {
         let shared: Vec<Arc<Shared>> = self.reg().runs.values().cloned().collect();
@@ -293,7 +360,7 @@ impl Manager {
                 shared.live().status.sessions = sessions;
             }
         }
-        if let Err(e) = write_status(&self.inner.dir, &self.list()) {
+        if let Err(e) = config::write_status(&self.inner.dir, &self.list()) {
             eprintln!("rc-core: {e}");
         }
     }
@@ -314,10 +381,17 @@ fn tick(weak: Weak<Inner>) {
     }
 }
 
-fn unknown(id: &str) -> String {
-    format!("unknown instance {id}")
+/// Caller holds the registry lock. Lock order: registry, then live.
+fn running_in(reg: &Registry, id: &str) -> bool {
+    reg.runs.get(id).is_some_and(|shared| {
+        shared
+            .live()
+            .thread
+            .as_ref()
+            .is_some_and(|t| !t.is_finished())
+    })
 }
 
-fn new_id() -> String {
-    uuid::Uuid::new_v4().to_string()
+fn unknown(id: &str) -> String {
+    format!("unknown instance {id}")
 }
