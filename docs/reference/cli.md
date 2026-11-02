@@ -92,7 +92,7 @@ Show whether the daemon runs (exit 0 running, 2 not running)
 
 ###### **Options:**
 
-* `--json`
+* `--json` — Print the daemon state as JSON instead of text
 
 
 
@@ -104,7 +104,7 @@ Show each instance with its runtime state
 
 ###### **Options:**
 
-* `--json`
+* `--json` — Print a JSON array of instances instead of a table
 
 
 
@@ -116,7 +116,7 @@ List configured instances
 
 ###### **Options:**
 
-* `--json`
+* `--json` — Print a JSON array of instances instead of a table
 
 
 
@@ -128,30 +128,30 @@ Add a folder as a new instance
 
 ###### **Arguments:**
 
-* `<FOLDER>`
-* `<EXTRA_ARGS>` — Extra arguments for `claude remote-control`, after --
+* `<FOLDER>` — Folder that `claude remote-control` runs in. Must exist. Stored as an absolute path
+* `<EXTRA_ARGS>` — Extra arguments for `claude remote-control`. Add them after `--`, e.g. `add DIR -- --verbose`
 
 ###### **Options:**
 
-* `--name <NAME>`
-* `--chrome`
-* `--no-chrome`
-* `--permission-mode <PERMISSION_MODE>`
+* `--name <NAME>` — Session name shown in Claude. Passed as `claude remote-control --name`. Not set by default
+* `--chrome` — Start with Chrome integration. Passed as `--chrome`. On by default for `add`
+* `--no-chrome` — Start without Chrome integration. Passed as `--no-chrome`. Turns off the `add` default
+* `--permission-mode <PERMISSION_MODE>` — Permission mode. Passed as `--permission-mode`. One of: acceptEdits, auto, bypassPermissions, default, dontAsk, plan. Not set by default, so `claude` decides
 
   Possible values: `acceptEdits`, `auto`, `bypassPermissions`, `default`, `dontAsk`, `plan`
 
-* `--spawn <SPAWN>`
+* `--spawn <SPAWN>` — Session spawn mode. Passed as `--spawn`. One of: same-dir, worktree, session. Not set by default
 
   Possible values: `same-dir`, `worktree`, `session`
 
-* `--capacity <CAPACITY>`
-* `--create-session-in-dir`
-* `--no-create-session-in-dir`
-* `--session-name-prefix <SESSION_NAME_PREFIX>`
-* `--auto-trust`
-* `--no-auto-trust`
-* `--auto-start`
-* `--no-auto-start`
+* `--capacity <CAPACITY>` — Maximum number of sessions. Passed as `--capacity`. Whole number. Not set by default
+* `--create-session-in-dir` — Create sessions in the instance folder. Passed as `--create-session-in-dir`. Not set by default
+* `--no-create-session-in-dir` — Do not create sessions in the instance folder. Passed as `--no-create-session-in-dir`
+* `--session-name-prefix <SESSION_NAME_PREFIX>` — Prefix for remote session names. Passed as `--remote-control-session-name-prefix`. Not set by default
+* `--auto-trust` — Answer the folder trust prompt for this instance. On by default for `add`. Not passed to `claude`
+* `--no-auto-trust` — Do not answer the folder trust prompt. You must trust the folder yourself. Not passed to `claude`
+* `--auto-start` — Start this instance when the daemon starts. On by default for `add`. Not passed to `claude`
+* `--no-auto-start` — Do not start this instance with the daemon. Start it with `rc-keeper start`. Not passed to `claude`
 
 
 
@@ -163,30 +163,30 @@ Change an instance. Only given flags change
 
 ###### **Arguments:**
 
-* `<SELECTOR>`
-* `<EXTRA_ARGS>` — Extra arguments for `claude remote-control`, after --
+* `<SELECTOR>` — Instance id or folder path
+* `<EXTRA_ARGS>` — Extra arguments for `claude remote-control`. Add them after `--`, e.g. `add DIR -- --verbose`
 
 ###### **Options:**
 
-* `--name <NAME>`
-* `--chrome`
-* `--no-chrome`
-* `--permission-mode <PERMISSION_MODE>`
+* `--name <NAME>` — Session name shown in Claude. Passed as `claude remote-control --name`. Not set by default
+* `--chrome` — Start with Chrome integration. Passed as `--chrome`. On by default for `add`
+* `--no-chrome` — Start without Chrome integration. Passed as `--no-chrome`. Turns off the `add` default
+* `--permission-mode <PERMISSION_MODE>` — Permission mode. Passed as `--permission-mode`. One of: acceptEdits, auto, bypassPermissions, default, dontAsk, plan. Not set by default, so `claude` decides
 
   Possible values: `acceptEdits`, `auto`, `bypassPermissions`, `default`, `dontAsk`, `plan`
 
-* `--spawn <SPAWN>`
+* `--spawn <SPAWN>` — Session spawn mode. Passed as `--spawn`. One of: same-dir, worktree, session. Not set by default
 
   Possible values: `same-dir`, `worktree`, `session`
 
-* `--capacity <CAPACITY>`
-* `--create-session-in-dir`
-* `--no-create-session-in-dir`
-* `--session-name-prefix <SESSION_NAME_PREFIX>`
-* `--auto-trust`
-* `--no-auto-trust`
-* `--auto-start`
-* `--no-auto-start`
+* `--capacity <CAPACITY>` — Maximum number of sessions. Passed as `--capacity`. Whole number. Not set by default
+* `--create-session-in-dir` — Create sessions in the instance folder. Passed as `--create-session-in-dir`. Not set by default
+* `--no-create-session-in-dir` — Do not create sessions in the instance folder. Passed as `--no-create-session-in-dir`
+* `--session-name-prefix <SESSION_NAME_PREFIX>` — Prefix for remote session names. Passed as `--remote-control-session-name-prefix`. Not set by default
+* `--auto-trust` — Answer the folder trust prompt for this instance. On by default for `add`. Not passed to `claude`
+* `--no-auto-trust` — Do not answer the folder trust prompt. You must trust the folder yourself. Not passed to `claude`
+* `--auto-start` — Start this instance when the daemon starts. On by default for `add`. Not passed to `claude`
+* `--no-auto-start` — Do not start this instance with the daemon. Start it with `rc-keeper start`. Not passed to `claude`
 
 
 
@@ -198,7 +198,7 @@ Remove an instance (stops it first)
 
 ###### **Arguments:**
 
-* `<SELECTOR>`
+* `<SELECTOR>` — Instance id or folder path
 
 
 
@@ -210,11 +210,11 @@ Start an instance, or all with --all
 
 ###### **Arguments:**
 
-* `<SELECTOR>` — Instance id or folder path
+* `<SELECTOR>` — Instance id or folder path. Give either this or `--all`, not both. An id wins when a folder path and an id match
 
 ###### **Options:**
 
-* `--all`
+* `--all` — Apply to every instance. Give either this or a selector, not both
 
 
 
@@ -226,11 +226,11 @@ Stop an instance, or all with --all
 
 ###### **Arguments:**
 
-* `<SELECTOR>` — Instance id or folder path
+* `<SELECTOR>` — Instance id or folder path. Give either this or `--all`, not both. An id wins when a folder path and an id match
 
 ###### **Options:**
 
-* `--all`
+* `--all` — Apply to every instance. Give either this or a selector, not both
 
 
 
@@ -242,11 +242,11 @@ Restart an instance, or all with --all
 
 ###### **Arguments:**
 
-* `<SELECTOR>` — Instance id or folder path
+* `<SELECTOR>` — Instance id or folder path. Give either this or `--all`, not both. An id wins when a folder path and an id match
 
 ###### **Options:**
 
-* `--all`
+* `--all` — Apply to every instance. Give either this or a selector, not both
 
 
 
@@ -258,11 +258,11 @@ Print the last log lines of an instance
 
 ###### **Arguments:**
 
-* `<SELECTOR>`
+* `<SELECTOR>` — Instance id or folder path
 
 ###### **Options:**
 
-* `-f`, `--follow` — Keep printing new lines
+* `-f`, `--follow` — Keep running and print new lines as they arrive. Stop with Ctrl+C
 
 
 
@@ -275,7 +275,7 @@ Get or set settings
 ###### **Subcommands:**
 
 * `get` — Print all settings
-* `set` — Set a value. Keys: claude-bin
+* `set` — Set a setting. The only key is `claude-bin`
 * `path` — Print the config dir (RC_KEEPER_CONFIG_DIR overrides it)
 
 
@@ -290,14 +290,14 @@ Print all settings
 
 ## `rc-keeper config set`
 
-Set a value. Keys: claude-bin
+Set a setting. The only key is `claude-bin`
 
 **Usage:** `rc-keeper config set <KEY> <VALUE>`
 
 ###### **Arguments:**
 
-* `<KEY>`
-* `<VALUE>`
+* `<KEY>` — Setting name. Must be `claude-bin`
+* `<VALUE>` — Path to the `claude` executable, e.g. `/usr/local/bin/claude`. Stored only on this machine in `settings.local.json`
 
 
 
@@ -331,7 +331,7 @@ Write the service file and enable it
 
 ###### **Options:**
 
-* `--dry-run` — Write files only. Skip systemctl/launchctl/schtasks
+* `--dry-run` — Write the service file only. Skip systemctl, launchctl and schtasks
 
 
 
@@ -343,7 +343,7 @@ Disable the service and remove its file
 
 ###### **Options:**
 
-* `--dry-run`
+* `--dry-run` — Remove the service file only. Skip systemctl, launchctl and schtasks
 
 
 

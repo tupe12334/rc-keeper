@@ -11,15 +11,17 @@ Add a folder as a new instance
 .SH OPTIONS
 .TP
 \fB\-\-name\fR \fI<NAME>\fR
-
+Session name shown in Claude. Passed as `claude remote\-control \-\-name`. Not set by default
 .TP
 \fB\-\-chrome\fR
-
+Start with Chrome integration. Passed as `\-\-chrome`. On by default for `add`
 .TP
 \fB\-\-no\-chrome\fR
-
+Start without Chrome integration. Passed as `\-\-no\-chrome`. Turns off the `add` default
 .TP
 \fB\-\-permission\-mode\fR \fI<PERMISSION_MODE>\fR
+Permission mode. Passed as `\-\-permission\-mode`. One of: acceptEdits, auto, bypassPermissions, default, dontAsk, plan. Not set by default, so `claude` decides
+.br
 
 .br
 \fIPossible values:\fR
@@ -39,6 +41,8 @@ plan
 .RE
 .TP
 \fB\-\-spawn\fR \fI<SPAWN>\fR
+Session spawn mode. Passed as `\-\-spawn`. One of: same\-dir, worktree, session. Not set by default
+.br
 
 .br
 \fIPossible values:\fR
@@ -52,34 +56,34 @@ session
 .RE
 .TP
 \fB\-\-capacity\fR \fI<CAPACITY>\fR
-
+Maximum number of sessions. Passed as `\-\-capacity`. Whole number. Not set by default
 .TP
 \fB\-\-create\-session\-in\-dir\fR
-
+Create sessions in the instance folder. Passed as `\-\-create\-session\-in\-dir`. Not set by default
 .TP
 \fB\-\-no\-create\-session\-in\-dir\fR
-
+Do not create sessions in the instance folder. Passed as `\-\-no\-create\-session\-in\-dir`
 .TP
 \fB\-\-session\-name\-prefix\fR \fI<SESSION_NAME_PREFIX>\fR
-
+Prefix for remote session names. Passed as `\-\-remote\-control\-session\-name\-prefix`. Not set by default
 .TP
 \fB\-\-auto\-trust\fR
-
+Answer the folder trust prompt for this instance. On by default for `add`. Not passed to `claude`
 .TP
 \fB\-\-no\-auto\-trust\fR
-
+Do not answer the folder trust prompt. You must trust the folder yourself. Not passed to `claude`
 .TP
 \fB\-\-auto\-start\fR
-
+Start this instance when the daemon starts. On by default for `add`. Not passed to `claude`
 .TP
 \fB\-\-no\-auto\-start\fR
-
+Do not start this instance with the daemon. Start it with `rc\-keeper start`. Not passed to `claude`
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
 .TP
 <\fIFOLDER\fR>
-
+Folder that `claude remote\-control` runs in. Must exist. Stored as an absolute path
 .TP
 [\fIEXTRA_ARGS\fR]
-Extra arguments for `claude remote\-control`, after \-\-
+Extra arguments for `claude remote\-control`. Add them after `\-\-`, e.g. `add DIR \-\- \-\-verbose`

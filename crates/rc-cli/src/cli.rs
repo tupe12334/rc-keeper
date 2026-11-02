@@ -42,28 +42,35 @@ pub enum Command {
     },
     /// Show each instance with its runtime state
     Status {
+        /// Print a JSON array of instances instead of a table
         #[arg(long)]
         json: bool,
     },
     /// List configured instances
     List {
+        /// Print a JSON array of instances instead of a table
         #[arg(long)]
         json: bool,
     },
     /// Add a folder as a new instance
     Add {
+        /// Folder that `claude remote-control` runs in. Must exist. Stored as an absolute path.
         folder: PathBuf,
         #[command(flatten)]
         flags: InstanceFlags,
     },
     /// Change an instance. Only given flags change.
     Edit {
+        /// Instance id or folder path
         selector: String,
         #[command(flatten)]
         flags: InstanceFlags,
     },
     /// Remove an instance (stops it first)
-    Remove { selector: String },
+    Remove {
+        /// Instance id or folder path
+        selector: String,
+    },
     /// Start an instance, or all with --all
     Start {
         #[command(flatten)]
@@ -81,8 +88,9 @@ pub enum Command {
     },
     /// Print the last log lines of an instance
     Logs {
+        /// Instance id or folder path
         selector: String,
-        /// Keep printing new lines
+        /// Keep running and print new lines as they arrive. Stop with Ctrl+C.
         #[arg(short, long)]
         follow: bool,
     },
@@ -108,6 +116,7 @@ pub enum DaemonCmd {
     Stop,
     /// Show whether the daemon runs (exit 0 running, 2 not running)
     Status {
+        /// Print the daemon state as JSON instead of text
         #[arg(long)]
         json: bool,
     },
@@ -117,8 +126,13 @@ pub enum DaemonCmd {
 pub enum ConfigCmd {
     /// Print all settings
     Get,
-    /// Set a value. Keys: claude-bin
-    Set { key: String, value: String },
+    /// Set a setting. The only key is `claude-bin`.
+    Set {
+        /// Setting name. Must be `claude-bin`.
+        key: String,
+        /// Path to the `claude` executable, e.g. `/usr/local/bin/claude`. Stored only on this machine in `settings.local.json`.
+        value: String,
+    },
     /// Print the config dir (RC_KEEPER_CONFIG_DIR overrides it)
     Path,
 }
@@ -127,12 +141,13 @@ pub enum ConfigCmd {
 pub enum ServiceCmd {
     /// Write the service file and enable it
     Install {
-        /// Write files only. Skip systemctl/launchctl/schtasks.
+        /// Write the service file only. Skip systemctl, launchctl and schtasks.
         #[arg(long)]
         dry_run: bool,
     },
     /// Disable the service and remove its file
     Uninstall {
+        /// Remove the service file only. Skip systemctl, launchctl and schtasks.
         #[arg(long)]
         dry_run: bool,
     },
@@ -143,8 +158,10 @@ pub enum ServiceCmd {
 #[derive(Args)]
 #[command(group(ArgGroup::new("target").required(true).multiple(false).args(["selector", "all"])))]
 pub struct Target {
-    /// Instance id or folder path
+    /// Instance id or folder path. Give either this or `--all`, not both.
+    /// An id wins when a folder path and an id match.
     pub selector: Option<String>,
+    /// Apply to every instance. Give either this or a selector, not both.
     #[arg(long)]
     pub all: bool,
 }
@@ -162,33 +179,46 @@ const SPAWN_MODES: [&str; 3] = ["same-dir", "worktree", "session"];
 /// Instance options. Unset options keep their value on `edit`.
 #[derive(Args, Default)]
 pub struct InstanceFlags {
+    /// Session name shown in Claude. Passed as `claude remote-control --name`. Not set by default.
     #[arg(long)]
     pub name: Option<String>,
+    /// Start with Chrome integration. Passed as `--chrome`. On by default for `add`.
     #[arg(long, conflicts_with = "no_chrome")]
     pub chrome: bool,
+    /// Start without Chrome integration. Passed as `--no-chrome`. Turns off the `add` default.
     #[arg(long)]
     pub no_chrome: bool,
+    /// Permission mode. Passed as `--permission-mode`. One of: acceptEdits, auto, bypassPermissions, default, dontAsk, plan. Not set by default, so `claude` decides.
     #[arg(long, value_parser = PossibleValuesParser::new(PERMISSION_MODES))]
     pub permission_mode: Option<String>,
+    /// Session spawn mode. Passed as `--spawn`. One of: same-dir, worktree, session. Not set by default.
     #[arg(long, value_parser = PossibleValuesParser::new(SPAWN_MODES))]
     pub spawn: Option<String>,
+    /// Maximum number of sessions. Passed as `--capacity`. Whole number. Not set by default.
     #[arg(long)]
     pub capacity: Option<u32>,
+    /// Create sessions in the instance folder. Passed as `--create-session-in-dir`. Not set by default.
     #[arg(long, conflicts_with = "no_create_session_in_dir")]
     pub create_session_in_dir: bool,
+    /// Do not create sessions in the instance folder. Passed as `--no-create-session-in-dir`.
     #[arg(long)]
     pub no_create_session_in_dir: bool,
+    /// Prefix for remote session names. Passed as `--remote-control-session-name-prefix`. Not set by default.
     #[arg(long)]
     pub session_name_prefix: Option<String>,
+    /// Answer the folder trust prompt for this instance. On by default for `add`. Not passed to `claude`.
     #[arg(long, conflicts_with = "no_auto_trust")]
     pub auto_trust: bool,
+    /// Do not answer the folder trust prompt. You must trust the folder yourself. Not passed to `claude`.
     #[arg(long)]
     pub no_auto_trust: bool,
+    /// Start this instance when the daemon starts. On by default for `add`. Not passed to `claude`.
     #[arg(long, conflicts_with = "no_auto_start")]
     pub auto_start: bool,
+    /// Do not start this instance with the daemon. Start it with `rc-keeper start`. Not passed to `claude`.
     #[arg(long)]
     pub no_auto_start: bool,
-    /// Extra arguments for `claude remote-control`, after --
+    /// Extra arguments for `claude remote-control`. Add them after `--`, e.g. `add DIR -- --verbose`.
     #[arg(last = true)]
     pub extra_args: Vec<String>,
 }

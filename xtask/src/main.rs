@@ -3,6 +3,7 @@
 mod cli_docs;
 mod docs;
 mod ipc_docs;
+mod ts_types;
 
 use std::path::PathBuf;
 

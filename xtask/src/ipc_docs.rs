@@ -6,6 +6,7 @@ use std::fmt::Write;
 use anyhow::Result;
 use rc_ipc::method::MethodSpec;
 use rc_ipc::schema::Settings;
+use schemars::generate::SchemaSettings;
 use schemars::SchemaGenerator;
 use serde_json::{json, Map, Value};
 
@@ -18,7 +19,9 @@ struct Ipc {
 }
 
 fn build() -> Ipc {
-    let mut generator = SchemaGenerator::default();
+    // Output direction: fields that serde always writes are required, even when they
+    // have a serde default on input.
+    let mut generator = SchemaGenerator::new(SchemaSettings::draft07().for_serialize());
     let specs = rc_ipc::method::specs(&mut generator);
     // Not used by any method, but it is a data type the docs must cover.
     generator.subschema_for::<Settings>();
@@ -61,6 +64,8 @@ pub fn markdown() -> String {
 
 pub fn json_schema() -> Result<String> {
     let ipc = build();
+    // Each method is an object with typed `params` and `result` properties, so that
+    // json-schema-to-typescript follows the `$ref`s into `definitions`.
     let methods: Map<String, Value> = ipc
         .specs
         .iter()
@@ -68,21 +73,48 @@ pub fn json_schema() -> Result<String> {
             let params = spec
                 .params
                 .as_ref()
-                .map_or(Value::Null, |p| p.as_value().clone());
-            let entry = json!({ "params": params, "result": spec.result.as_value() });
+                .map_or_else(|| json!({ "type": "null" }), |p| p.as_value().clone());
+            let entry = json!({
+                "type": "object",
+                "properties": { "params": params, "result": spec.result.as_value() },
+                "required": ["params", "result"],
+            });
             (spec.method.name().to_string(), entry)
         })
         .collect();
     let defs: Map<String, Value> = ipc.defs.into_iter().collect();
     let doc = json!({
         "$comment": HEADER,
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$schema": "http://json-schema.org/draft-07/schema#",
         "title": "rc-keeper IPC",
-        "description": "Params and results of each daemon method. Methods: see the methods object.",
-        "methods": methods,
-        "$defs": defs,
+        "description": "Params and results of each daemon method, keyed by method name.",
+        "type": "object",
+        "properties": {
+            "methods": { "type": "object", "properties": methods },
+            "dataTypes": { "type": "object", "properties": data_types() },
+        },
+        "definitions": defs,
     });
     Ok(format!("{}\n", serde_json::to_string_pretty(&doc)?))
+}
+
+/// Data types the UI and the docs rely on. Each is a `$ref`, so every one is emitted.
+fn data_types() -> Map<String, Value> {
+    [
+        "InstanceConfig",
+        "InstanceStatus",
+        "InstanceView",
+        "Settings",
+        "State",
+    ]
+    .into_iter()
+    .map(|name| {
+        (
+            name.to_string(),
+            json!({ "$ref": format!("#/definitions/{name}") }),
+        )
+    })
+    .collect()
 }
 
 const WIRE: &str = "\

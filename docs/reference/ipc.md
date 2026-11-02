@@ -49,7 +49,7 @@ Result of `get_settings`. `autostart` is always `null`: the GUI owns login autos
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `autostart` | null | yes |  |
-| `claudeBin` | string \| null | no |  |
+| `claudeBin` | string \| null | yes |  |
 
 ### IdParams
 
@@ -65,32 +65,32 @@ One folder that runs `claude remote-control`.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `autoStart` | boolean | no |  |
-| `autoTrust` | boolean | no |  |
-| `capacity` | integer \| null | no |  |
-| `chrome` | boolean | no |  |
-| `createSessionInDir` | boolean \| null | no |  |
-| `extraArgs` | string[] | no | Extra arguments for `claude remote-control`. |
-| `folder` | string | no | Folder that `claude remote-control` runs in. |
-| `id` | string | no | Stable id. Empty on `add_instance`: the daemon generates one. |
-| `name` | string \| null | no |  |
-| `permissionMode` | string \| null | no | One of `acceptEdits`, `auto`, `bypassPermissions`, `default`, `dontAsk`, `plan`. |
-| `sessionNamePrefix` | string \| null | no |  |
-| `spawn` | string \| null | no | One of `same-dir`, `worktree`, `session`. |
+| `autoStart` | boolean | yes |  |
+| `autoTrust` | boolean | yes |  |
+| `capacity` | integer \| null | yes |  |
+| `chrome` | boolean | yes |  |
+| `createSessionInDir` | boolean \| null | yes |  |
+| `extraArgs` | string[] | yes | Extra arguments for `claude remote-control`. |
+| `folder` | string | yes | Folder that `claude remote-control` runs in. |
+| `id` | string | yes | Stable id. Empty on `add_instance`: the daemon generates one. |
+| `name` | string \| null | yes |  |
+| `permissionMode` | string \| null | yes | One of `acceptEdits`, `auto`, `bypassPermissions`, `default`, `dontAsk`, `plan`. |
+| `sessionNamePrefix` | string \| null | yes |  |
+| `spawn` | string \| null | yes | One of `same-dir`, `worktree`, `session`. |
 
 ### InstanceStatus
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `id` | string | yes |  |
-| `lastError` | string \| null | no |  |
-| `nextRetrySecs` | integer \| null | no |  |
-| `pid` | integer \| null | no |  |
+| `lastError` | string \| null | yes |  |
+| `nextRetrySecs` | integer \| null | yes |  |
+| `pid` | integer \| null | yes |  |
 | `restarts` | integer | yes |  |
 | `sessionUrls` | string[] | yes |  |
 | `sessions` | integer | yes |  |
 | `state` | [State](#state) | yes |  |
-| `uptimeSecs` | integer \| null | no |  |
+| `uptimeSecs` | integer \| null | yes |  |
 
 ### InstanceView
 
@@ -114,7 +114,7 @@ Params of `set_settings`. Absent or `null` clears the claude binary path.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `claudeBin` | string \| null | no |  |
+| `claudeBin` | string \| null | yes |  |
 
 ### Settings
 
@@ -122,7 +122,7 @@ Daemon settings. Shared by all instances.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `claudeBin` | string \| null | no | Path to the `claude` binary. `null` means detect it. |
+| `claudeBin` | string \| null | yes | Path to the `claude` binary. `null` means detect it. |
 
 ### State
 
