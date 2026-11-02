@@ -33,21 +33,26 @@ const hint = "text-xs text-muted-foreground";
 
 export function InstanceForm({ initial, onClose }: Props) {
   const [form, setForm] = useState<FormState>(() => (initial ? configToForm(initial) : emptyForm()));
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ field: "folder" | "capacity"; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }));
 
   async function pickFolder() {
-    const picked = await openDialog({ directory: true, multiple: false });
-    if (typeof picked === "string") set("folder", picked);
+    try {
+      const picked = await openDialog({ directory: true, multiple: false });
+      if (typeof picked === "string") set("folder", picked);
+    } catch (e) {
+      toast.error(String(e));
+    }
   }
 
   async function save() {
     const problem = validateForm(form);
     if (problem) {
-      setError(problem);
+      setError({ field: form.folder.trim() === "" ? "folder" : "capacity", message: problem });
       return;
     }
+    setError(null);
     setSaving(true);
     try {
       if (initial) {
@@ -57,13 +62,15 @@ export function InstanceForm({ initial, onClose }: Props) {
         await api.addInstance(formToConfig(form, ""));
         toast.success("Folder added");
       }
+      setSaving(false);
       onClose();
     } catch (e) {
-      toast.error(String(e));
-    } finally {
       setSaving(false);
+      toast.error(String(e));
     }
   }
+
+  const describe = (field: "folder" | "capacity") => (error?.field === field ? "f-error" : undefined);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -85,7 +92,7 @@ export function InstanceForm({ initial, onClose }: Props) {
               Folder
             </label>
             <div className="flex gap-2">
-              <Input id="f-folder" value={form.folder} onChange={(e) => set("folder", e.target.value)} placeholder="/Users/you/project" aria-invalid={!!error && !form.folder.trim()} />
+              <Input id="f-folder" value={form.folder} onChange={(e) => set("folder", e.target.value)} placeholder="/Users/you/project" aria-invalid={error?.field === "folder"} aria-describedby={describe("folder")} />
               {isTauri && (
                 <Button type="button" variant="outline" onClick={() => void pickFolder()}>
                   <FolderOpen />
@@ -160,7 +167,7 @@ export function InstanceForm({ initial, onClose }: Props) {
             <label htmlFor="f-capacity" className={label}>
               Capacity
             </label>
-            <Input id="f-capacity" type="number" min={1} inputMode="numeric" value={form.capacity} onChange={(e) => set("capacity", e.target.value)} placeholder="Unset" />
+            <Input id="f-capacity" type="number" min={1} inputMode="numeric" value={form.capacity} onChange={(e) => set("capacity", e.target.value)} placeholder="Unset" aria-invalid={error?.field === "capacity"} aria-describedby={describe("capacity")} />
           </div>
 
           <div className="grid gap-1.5">
@@ -212,8 +219,8 @@ export function InstanceForm({ initial, onClose }: Props) {
           </div>
 
           {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
+            <p id="f-error" role="alert" className="text-sm text-destructive">
+              {error.message}
             </p>
           )}
 

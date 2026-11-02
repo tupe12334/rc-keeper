@@ -37,7 +37,7 @@ export function LogsDialog({ view, onClose }: { view: InstanceView; onClose: () 
           <DialogDescription>Last 500 lines. Refreshes every second.</DialogDescription>
         </DialogHeader>
         <ScrollArea className="h-[60vh] min-h-48 rounded-md border border-border bg-muted">
-          <pre className="whitespace-pre-wrap break-all p-3 font-mono text-xs leading-relaxed" aria-label="Log output">
+          <pre role="region" tabIndex={0} className="whitespace-pre-wrap break-all p-3 font-mono text-xs leading-relaxed" aria-label="Log output">
             {lines.length === 0 ? "No output yet." : lines.join("\n")}
           </pre>
           <div ref={endRef} />

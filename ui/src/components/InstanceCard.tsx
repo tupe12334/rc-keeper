@@ -36,7 +36,7 @@ export function InstanceCard({ view, onEdit, onLogs, onChanged }: Props) {
   const help = stateHelp[st.state];
 
   return (
-    <Card className="flex w-full flex-col gap-3 p-4" aria-label={`Folder ${title}`}>
+    <Card role="group" className="flex w-full flex-col gap-3 p-4" aria-label={`Folder ${title}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-base font-semibold">{title}</h2>
@@ -72,7 +72,7 @@ export function InstanceCard({ view, onEdit, onLogs, onChanged }: Props) {
         <ul className="flex flex-col gap-1 text-sm">
           {st.sessionUrls.map((url) => (
             <li key={url}>
-              <button type="button" onClick={() => void openExternal(url)} className="inline-flex max-w-full items-center gap-1 truncate text-left underline underline-offset-2">
+              <button type="button" onClick={() => void openExternal(url).catch((e: unknown) => toast.error(String(e)))} className="inline-flex max-w-full items-center gap-1 truncate text-left underline underline-offset-2">
                 <ExternalLink className="size-3.5 shrink-0" aria-hidden />
                 <span className="truncate">{url}</span>
               </button>

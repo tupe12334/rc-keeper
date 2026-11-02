@@ -34,10 +34,17 @@ export function emptyForm(): InstanceForm {
   };
 }
 
-/** Splits on whitespace. Empty input gives []. */
+/** Splits on whitespace; "double" and 'single' quoted spans stay one arg. */
 export function parseExtraArgs(text: string): string[] {
-  return text.split(/\s+/).filter(Boolean);
+  return [...text.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
 }
+
+/** Inverse of parseExtraArgs: quotes args that contain whitespace. */
+export function formatExtraArgs(args: string[]): string {
+  return args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ");
+}
+
+export const CAPACITY_MAX = 4294967295; // u32::MAX, the Rust side type
 
 const orNull = (s: string) => (s.trim() === "" ? null : s.trim());
 const pick = (s: string) => (s === UNSET ? null : s);
@@ -70,7 +77,7 @@ export function configToForm(cfg: InstanceConfig): InstanceForm {
     capacity: cfg.capacity == null ? "" : String(cfg.capacity),
     createSessionInDir: cfg.createSessionInDir == null ? "unset" : cfg.createSessionInDir ? "on" : "off",
     sessionNamePrefix: cfg.sessionNamePrefix ?? "",
-    extraArgs: cfg.extraArgs.join(" "),
+    extraArgs: formatExtraArgs(cfg.extraArgs),
     autoTrust: cfg.autoTrust,
     autoStart: cfg.autoStart,
   };
@@ -80,8 +87,8 @@ export function configToForm(cfg: InstanceConfig): InstanceForm {
 export function validateForm(form: InstanceForm): string | null {
   if (form.folder.trim() === "") return "Folder is required.";
   const cap = form.capacity.trim();
-  if (cap !== "" && !(Number.isInteger(Number(cap)) && Number(cap) > 0)) {
-    return "Capacity must be a whole number above 0.";
+  if (cap !== "" && !(Number.isInteger(Number(cap)) && Number(cap) > 0 && Number(cap) <= CAPACITY_MAX)) {
+    return `Capacity must be a whole number from 1 to ${CAPACITY_MAX}.`;
   }
   return null;
 }

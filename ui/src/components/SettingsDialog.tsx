@@ -12,11 +12,23 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [daemon, setDaemon] = useState<DaemonInfo | null>(null);
 
   useEffect(() => {
+    let alive = true;
     void api.getSettings().then((s) => {
+      if (!alive) return;
       setSettings(s);
       setBin(s.claudeBin ?? "");
     });
-    void api.daemonInfo().then(setDaemon).catch(() => setDaemon(null));
+    void api
+      .daemonInfo()
+      .then((d) => {
+        if (alive) setDaemon(d);
+      })
+      .catch(() => {
+        if (alive) setDaemon(null);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   async function detect() {
