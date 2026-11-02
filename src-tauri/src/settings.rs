@@ -25,16 +25,18 @@ pub fn get(app: &AppHandle, daemon: &Daemon) -> Result<SettingsDto, String> {
 }
 
 pub fn set(app: &AppHandle, daemon: &Daemon, dto: SettingsDto) -> Result<(), String> {
-    daemon::call(
-        daemon,
-        "set_settings",
-        json!({ "claudeBin": dto.claude_bin }),
-    )?;
+    // ponytail: autostart goes first. If the daemon write then fails, autostart stays changed and the user retries.
     let launcher = app.autolaunch();
     let result = if dto.autostart {
         launcher.enable()
     } else {
         launcher.disable()
     };
-    result.map_err(|e| e.to_string())
+    result.map_err(|e| e.to_string())?;
+    daemon::call(
+        daemon,
+        "set_settings",
+        json!({ "claudeBin": dto.claude_bin }),
+    )?;
+    Ok(())
 }

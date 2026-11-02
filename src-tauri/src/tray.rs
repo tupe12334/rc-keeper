@@ -1,3 +1,5 @@
+use std::thread;
+
 use serde_json::{json, Value};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -16,6 +18,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
             &MenuItem::with_id(app, "start_all", "Start all", true, None::<&str>)?,
             &MenuItem::with_id(app, "stop_all", "Stop all", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "start_daemon", "Start daemon", true, None::<&str>)?,
             &MenuItem::with_id(app, "stop_daemon", "Stop daemon", true, None::<&str>)?,
             &MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?,
         ],
@@ -44,23 +47,28 @@ pub fn show_main(app: &AppHandle) {
 }
 
 fn on_menu(app: &AppHandle, id: &str) {
-    let daemon = app.state::<Daemon>();
-    // ponytail: menu actions ignore IPC errors; the tooltip shows the daemon state on the next tick.
     match id {
         "open" => show_main(app),
-        "start_all" => {
-            let _ = daemon::call(&daemon, "start_all", json!({}));
-        }
-        "stop_all" => {
-            let _ = daemon::call(&daemon, "stop_all", json!({}));
-        }
-        "stop_daemon" => {
-            let _ = daemon::stop(&daemon);
-        }
+        "start_all" => in_background(app, |d| daemon::call(d, "start_all", json!({})).map(|_| ())),
+        "stop_all" => in_background(app, |d| daemon::call(d, "stop_all", json!({})).map(|_| ())),
+        "start_daemon" => in_background(app, daemon::start),
+        "stop_daemon" => in_background(app, daemon::stop),
         // Quitting the GUI leaves the daemon running.
         "quit" => app.exit(0),
         _ => {}
     }
+}
+
+/// Runs a daemon action on its own thread, so the tray stays responsive during IPC.
+// ponytail: errors are dropped; the tooltip shows the daemon state on the next tick.
+fn in_background(
+    app: &AppHandle,
+    action: impl FnOnce(&Daemon) -> Result<(), String> + Send + 'static,
+) {
+    let app = app.clone();
+    thread::spawn(move || {
+        let _ = action(&app.state::<Daemon>());
+    });
 }
 
 /// Tooltip text from an `list_instances` result, e.g. "rc-keeper: 2 running, 1 restarting".

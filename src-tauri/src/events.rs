@@ -13,7 +13,7 @@ pub fn spawn(app: AppHandle) {
         let mut client = None;
         loop {
             if client.is_none() {
-                client = daemon::try_ping();
+                client = daemon::try_ping().map(|(c, _)| c);
             }
             let views = client
                 .as_mut()

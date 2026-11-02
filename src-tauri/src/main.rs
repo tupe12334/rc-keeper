@@ -6,12 +6,8 @@ mod events;
 mod settings;
 mod tray;
 
-use std::sync::Mutex;
-
 use tauri::{Manager as _, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
-
-use daemon::Daemon;
 
 fn main() {
     tauri::Builder::default()
@@ -25,9 +21,8 @@ fn main() {
             None,
         ))
         .setup(|app| {
-            // A failed connect is not fatal: commands retry and report the error to the UI.
-            let client = daemon::connect_or_spawn().ok();
-            app.manage(Daemon(Mutex::new(client)));
+            // Connects lazily on the first command, so startup never waits on the daemon.
+            app.manage(daemon::Daemon::new());
             tray::build(app.handle())?;
             events::spawn(app.handle().clone());
             Ok(())
@@ -54,6 +49,7 @@ fn main() {
             commands::set_settings,
             commands::detect_claude_bin,
             commands::daemon_info,
+            commands::start_daemon,
             commands::stop_daemon,
         ])
         .run(tauri::generate_context!())
