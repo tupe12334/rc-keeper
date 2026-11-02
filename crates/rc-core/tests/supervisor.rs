@@ -92,6 +92,22 @@ fn auto_trust_reaches_running_with_session_url() {
 }
 
 #[test]
+fn add_with_auto_start_runs_without_start_call() {
+    let (manager, folder) = setup("add_auto_start");
+    let cfg = InstanceConfig {
+        auto_start: true,
+        ..instance(&folder, true, &[])
+    };
+    let id = manager.add(cfg).unwrap();
+
+    let ready = wait_for(Duration::from_secs(20), || {
+        status(&manager, &id).state == State::Running
+    });
+    assert!(ready, "add did not start it: {:?}", status(&manager, &id));
+    manager.shutdown();
+}
+
+#[test]
 fn answer_is_sent_at_least_two_seconds_after_prompt() {
     let (manager, folder) = setup("answer_delay");
     let id = manager.add(instance(&folder, true, &[])).unwrap();

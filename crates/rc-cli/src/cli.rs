@@ -212,7 +212,7 @@ pub struct InstanceFlags {
     /// Do not answer the folder trust prompt. You must trust the folder yourself. Not passed to `claude`.
     #[arg(long)]
     pub no_auto_trust: bool,
-    /// Start this instance when the daemon starts. On by default for `add`. Not passed to `claude`.
+    /// Start this instance now and each time the daemon starts. On by default for `add`. Not passed to `claude`.
     #[arg(long, conflicts_with = "no_auto_start")]
     pub auto_start: bool,
     /// Do not start this instance with the daemon. Start it with `rc-keeper start`. Not passed to `claude`.
