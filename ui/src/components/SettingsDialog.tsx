@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api, type DaemonInfo, type UiSettings } from "@/api";
+import { FieldHelp } from "@/components/FieldHelp";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -71,9 +72,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
         <div className="flex flex-col gap-4 overflow-y-auto">
           <div className="grid gap-1.5">
-            <label htmlFor="s-bin" className="text-sm font-medium">
-              Claude binary path
-            </label>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="s-bin" className="text-sm font-medium">
+                Claude binary path
+              </label>
+              <FieldHelp field="settings.claudeBin" />
+            </div>
             <div className="flex gap-2">
               <Input id="s-bin" value={bin} onChange={(e) => setBin(e.target.value)} placeholder="Found on PATH when empty" />
               <Button variant="outline" onClick={() => void detect()}>
@@ -83,9 +87,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="flex items-center justify-between gap-4">
-            <label htmlFor="s-autostart" className="text-sm font-medium">
-              Launch at login
-            </label>
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="s-autostart" className="text-sm font-medium">
+                Launch at login
+              </label>
+              <FieldHelp field="settings.autostart" />
+            </div>
             <Switch id="s-autostart" checked={settings.autostart} onCheckedChange={(v) => setSettings((s) => ({ ...s, autostart: v }))} />
           </div>
 
