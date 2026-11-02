@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { RcApi } from "./index";
-import type { DaemonInfo, InstanceConfig, InstanceView, UiSettings } from "./types";
+import type { DaemonInfo, InstanceConfig, InstanceView, TakeoverResult, UiSettings } from "./types";
 
 export const tauriApi: RcApi = {
   listInstances: () => invoke<InstanceView[]>("list_instances"),
@@ -11,6 +11,8 @@ export const tauriApi: RcApi = {
   startInstance: (id: string) => invoke<void>("start_instance", { id }),
   stopInstance: (id: string) => invoke<void>("stop_instance", { id }),
   restartInstance: (id: string) => invoke<void>("restart_instance", { id }),
+  forceStart: (id: string) => invoke<TakeoverResult>("force_start", { id }),
+  previewForceStart: (id: string) => invoke<TakeoverResult>("preview_force_start", { id }),
   getLogs: (id: string) => invoke<string[]>("get_logs", { id }),
   startAll: () => invoke<void>("start_all"),
   stopAll: () => invoke<void>("stop_all"),

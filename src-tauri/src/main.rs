@@ -42,6 +42,8 @@ fn main() {
             commands::start_instance,
             commands::stop_instance,
             commands::restart_instance,
+            commands::force_start,
+            commands::preview_force_start,
             commands::get_logs,
             commands::start_all,
             commands::stop_all,

@@ -22,6 +22,10 @@ export interface RcKeeperIPC {
       params: null;
       result: string | null;
     };
+    force_start?: {
+      params: IdParams;
+      result: TakeoverResult;
+    };
     get_logs?: {
       params: IdParams;
       result: string[];
@@ -37,6 +41,10 @@ export interface RcKeeperIPC {
     ping?: {
       params: null;
       result: PingResult;
+    };
+    preview_force_start?: {
+      params: IdParams;
+      result: TakeoverResult;
     };
     remove_instance?: {
       params: IdParams;
@@ -94,6 +102,10 @@ export interface InstanceConfig {
    */
   folder: string;
   /**
+   * Stop the other claude rc in the folder when this instance is folder-busy, then retry.
+   */
+  forceBoot: boolean;
+  /**
    * Stable id. Empty on `add_instance`: the daemon generates one.
    */
   id: string;
@@ -139,10 +151,22 @@ export interface CfgParams {
   cfg: InstanceConfig;
 }
 /**
- * Params of `get_logs`, `remove_instance`, `start_instance`, `stop_instance`, `restart_instance`.
+ * Params of `get_logs`, `remove_instance`, `start_instance`, `stop_instance`, `restart_instance`,
+ * `force_start` and `preview_force_start`.
  */
 export interface IdParams {
   id: string;
+}
+/**
+ * Result of `force_start` and `preview_force_start`. `stopped` lists the pids that were stopped
+ * (or, for a preview, that would be stopped).
+ */
+export interface TakeoverResult {
+  /**
+   * What may start a stopped process again, e.g. `launchd (ppid 1)`. Null when nothing was found.
+   */
+  respawnRisk: string | null;
+  stopped: number[];
 }
 /**
  * Result of `get_settings`. `autostart` is always `null`: the GUI owns login autostart.

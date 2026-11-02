@@ -30,7 +30,7 @@ describe("state to badge mapping", () => {
 
   it("overall tone: red beats yellow, all running is green, none is gray", () => {
     const view = (state: State) => ({
-      config: { id: state, folder: "/x", name: null, chrome: true, permissionMode: null, spawn: null, capacity: null, createSessionInDir: null, sessionNamePrefix: null, extraArgs: [], autoTrust: true, autoStart: true },
+      config: { id: state, folder: "/x", name: null, chrome: true, permissionMode: null, spawn: null, capacity: null, createSessionInDir: null, sessionNamePrefix: null, extraArgs: [], autoTrust: true, autoStart: true, forceBoot: false },
       status: { id: state, state, pid: null, sessions: 0, uptimeSecs: null, restarts: 0, nextRetrySecs: null, lastError: null, sessionUrls: [] },
     });
     expect(overallTone([])).toBe("gray");

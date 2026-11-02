@@ -20,6 +20,7 @@ const baseCfg: InstanceConfig = {
   extraArgs: [],
   autoTrust: true,
   autoStart: true,
+  forceBoot: false,
 };
 
 describe("App", () => {
@@ -56,6 +57,7 @@ describe("App", () => {
       extraArgs: ["--verbose", "--model", "opus"],
       autoTrust: true,
       autoStart: true,
+      forceBoot: false,
     });
   });
 

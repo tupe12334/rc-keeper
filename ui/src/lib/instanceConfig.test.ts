@@ -37,6 +37,7 @@ describe("formToConfig", () => {
       extraArgs: ["--x", "y"],
       autoTrust: true,
       autoStart: true,
+      forceBoot: false,
     });
   });
 

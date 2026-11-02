@@ -18,6 +18,7 @@ const FORM_FIELDS: FieldKey[] = [
   "extraArgs",
   "autoTrust",
   "autoStart",
+  "forceBoot",
 ];
 
 const infoButton = (field: FieldKey) => screen.getByRole("button", { name: `About ${FIELD_HELP[field].title}` });
@@ -68,6 +69,18 @@ describe("popover", () => {
     await user.click(screen.getByRole("link", { name: "Official docs ↗" }));
 
     expect(open).toHaveBeenCalledWith(FIELD_HELP.autoTrust.docUrl, "_blank", "noopener,noreferrer");
+  });
+
+  it("explains force boot and links the remote-control docs", async () => {
+    const user = userEvent.setup();
+    render(<InstanceForm initial={null} onClose={() => {}} />);
+    await user.click(infoButton("forceBoot"));
+
+    expect(screen.getByText(FIELD_HELP.forceBoot.text)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Official docs ↗" })).toHaveAttribute(
+      "href",
+      "https://code.claude.com/docs/en/remote-control",
+    );
   });
 
   it("shows the meaning of the selected select value", async () => {

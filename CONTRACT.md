@@ -50,9 +50,12 @@ The config dir can be a git repo (dotfiles), shared across machines. Rules:
 
 ## v4 addendum: force boot (take over a folder)
 Only one `claude remote-control` may serve a folder. "Force boot" stops the other one and starts the folder under rc-keeper.
-- Detect: a process is a *foreign rc* for folder F when its command line runs `claude` with `remote-control` or `rc`, its cwd equals F (canonical), and it is not a child of this daemon. Use `sysinfo` (cmd + cwd) — works on macOS, Linux, Windows.
-- Stop: SIGTERM (Windows: terminate), wait up to 5 s, then SIGKILL; also kill its `--sdk-url` session children. Never kill by name pattern alone; never touch processes outside folder F.
+- Detect: a process is a *foreign rc* for folder F when its program is `claude` (a binary named `claude`/`claude.exe`, a native build under `claude/versions/`, or node/bun running the npm package `@anthropic-ai/claude-code/cli.js`), its first argument is `remote-control` or `rc`, its cwd equals F (canonical, case-folded on macOS and Windows), and it is outside this daemon's process tree (not the daemon, a descendant, or an ancestor). Use `sysinfo` (cmd + cwd) — works on macOS, Linux, Windows.
+- Stop: SIGTERM (Windows: terminate), wait up to 5 s, then SIGKILL. Victims are the foreign rc plus its *direct* children whose arguments include `--sdk-url`. Each pid carries its start time and command fingerprint from the scan; it is re-checked before each signal and skipped if it changed (pid reuse). Pids 0 and above `i32::MAX` never reach kill(2). The takeover path never signals process groups.
+- Respawn budget: at most 3 takeovers per instance per 10 min. Past that, the instance stops in `error` with `last_error` naming the respawning parent, and rc-keeper stops retrying.
 - Supervisor: if the foreign rc's parent is a supervisor that will respawn it (launchd, systemd, another rc-keeper), report that in the result (`respawnRisk: "<parent command>"`) so the user can disable it.
 - Per-instance option `forceBoot: bool` (default false): on folder-busy, take over automatically instead of backing off.
 - One-shot: IPC method `force_start({id}) -> {stopped: [pid], respawnRisk: string|null}`; Tauri command of the same name; CLI `rc-keeper start <sel> --force` and `rc-keeper add <folder> --force-boot`.
+- Preview: IPC method `preview_force_start({id})` returns the same shape and stops nothing. The UI confirm dialog uses it.
+- `forceBoot` is written to an instance file only when true, so files without it keep their bytes.
 - UI: a folder-busy card shows a "Take over" button (confirm dialog naming the PIDs it will stop); the form gets a "Force boot" switch with an info popover.

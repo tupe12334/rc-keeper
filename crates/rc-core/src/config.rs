@@ -36,6 +36,9 @@ struct InstanceFile {
     #[serde(skip_serializing_if = "Option::is_none")]
     create_session_in_dir: Option<bool>,
     extra_args: Vec<String>,
+    /// Written only when true, so files of instances without it keep their bytes.
+    #[serde(default, skip_serializing_if = "is_false")]
+    force_boot: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     permission_mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,6 +60,7 @@ impl From<&InstanceConfig> for InstanceFile {
             chrome,
             create_session_in_dir,
             extra_args,
+            force_boot,
             permission_mode,
             session_name_prefix,
             spawn,
@@ -71,6 +75,7 @@ impl From<&InstanceConfig> for InstanceFile {
             chrome: *chrome,
             create_session_in_dir: *create_session_in_dir,
             extra_args: extra_args.clone(),
+            force_boot: *force_boot,
             permission_mode: permission_mode.clone(),
             session_name_prefix: session_name_prefix.clone(),
             spawn: spawn.clone(),
@@ -90,11 +95,16 @@ impl From<InstanceFile> for InstanceConfig {
             chrome: f.chrome,
             create_session_in_dir: f.create_session_in_dir,
             extra_args: f.extra_args,
+            force_boot: f.force_boot,
             permission_mode: f.permission_mode,
             session_name_prefix: f.session_name_prefix,
             spawn: f.spawn,
         }
     }
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 /// What `load` found on disk. `broken` maps an id to its parse error.

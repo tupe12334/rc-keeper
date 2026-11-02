@@ -44,6 +44,16 @@ pub async fn restart_instance(daemon: State<'_, Daemon>, id: String) -> CmdResul
 }
 
 #[tauri::command]
+pub async fn force_start(daemon: State<'_, Daemon>, id: String) -> CmdResult {
+    daemon::call(&daemon, "force_start", json!({ "id": id }))
+}
+
+#[tauri::command]
+pub async fn preview_force_start(daemon: State<'_, Daemon>, id: String) -> CmdResult {
+    daemon::call(&daemon, "preview_force_start", json!({ "id": id }))
+}
+
+#[tauri::command]
 pub async fn get_logs(daemon: State<'_, Daemon>, id: String) -> CmdResult {
     daemon::call(&daemon, "get_logs", json!({ "id": id }))
 }

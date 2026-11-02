@@ -22,6 +22,7 @@ import {
 
 export const BYPASS_WARNING = "Remote sessions will run any command in this folder without asking.";
 export const TRUST_HELP = "Remote sessions can read, edit and run files in this folder.";
+export const FORCE_BOOT_HELP = "Stops the other claude rc that serves this folder. Off leaves it running.";
 
 interface Props {
   /** Config to edit, or null to add a new folder. */
@@ -240,6 +241,19 @@ export function InstanceForm({ initial, onClose }: Props) {
               <p className={hint}>{TRUST_HELP}</p>
             </div>
             <Switch id="f-trust" checked={form.autoTrust} onCheckedChange={(v) => set("autoTrust", v)} />
+          </div>
+
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="f-force" className={label}>
+                  Force boot
+                </label>
+                <FieldHelp field="forceBoot" />
+              </div>
+              <p className={hint}>{FORCE_BOOT_HELP}</p>
+            </div>
+            <Switch id="f-force" checked={form.forceBoot} onCheckedChange={(v) => set("forceBoot", v)} />
           </div>
 
           <div className="flex items-center justify-between gap-4">

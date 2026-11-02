@@ -5,7 +5,7 @@
 .SH NAME
 rc\-keeper\-edit \- Change an instance. Only given flags change
 .SH SYNOPSIS
-\fBrc\-keeper\-edit\fR [\fB\-\-name\fR] [\fB\-\-chrome\fR] [\fB\-\-no\-chrome\fR] [\fB\-\-permission\-mode\fR] [\fB\-\-spawn\fR] [\fB\-\-capacity\fR] [\fB\-\-create\-session\-in\-dir\fR] [\fB\-\-no\-create\-session\-in\-dir\fR] [\fB\-\-session\-name\-prefix\fR] [\fB\-\-auto\-trust\fR] [\fB\-\-no\-auto\-trust\fR] [\fB\-\-auto\-start\fR] [\fB\-\-no\-auto\-start\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISELECTOR\fR> [\fIEXTRA_ARGS\fR] 
+\fBrc\-keeper\-edit\fR [\fB\-\-name\fR] [\fB\-\-chrome\fR] [\fB\-\-no\-chrome\fR] [\fB\-\-permission\-mode\fR] [\fB\-\-spawn\fR] [\fB\-\-capacity\fR] [\fB\-\-create\-session\-in\-dir\fR] [\fB\-\-no\-create\-session\-in\-dir\fR] [\fB\-\-session\-name\-prefix\fR] [\fB\-\-auto\-trust\fR] [\fB\-\-no\-auto\-trust\fR] [\fB\-\-auto\-start\fR] [\fB\-\-no\-auto\-start\fR] [\fB\-\-force\-boot\fR] [\fB\-\-no\-force\-boot\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISELECTOR\fR> [\fIEXTRA_ARGS\fR] 
 .SH DESCRIPTION
 Change an instance. Only given flags change
 .SH OPTIONS
@@ -78,6 +78,12 @@ Start this instance when the daemon starts. On by default for `add`. Not passed 
 .TP
 \fB\-\-no\-auto\-start\fR
 Do not start this instance with the daemon. Start it with `rc\-keeper start`. Not passed to `claude`
+.TP
+\fB\-\-force\-boot\fR
+When another `claude remote\-control` serves the folder, stop it and start this instance. Kills without asking. Not passed to `claude`
+.TP
+\fB\-\-no\-force\-boot\fR
+Back off when the folder is busy instead of taking it over. Off by default. Not passed to `claude`
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

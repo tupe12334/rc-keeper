@@ -4,6 +4,7 @@ use crate::locate::find_claude_bin;
 use crate::model::{AppConfig, InstanceConfig, InstanceStatus, InstanceView, Settings, State};
 use crate::procs;
 use crate::supervisor::{self, Job, Shared};
+use crate::takeover::{self, Takeover};
 use crate::watch;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -243,6 +244,18 @@ impl Manager {
         self.start(id)
     }
 
+    /// Stops the other claude rc in the instance folder, then restarts the instance.
+    pub fn force_start(&self, id: &str) -> Result<Takeover, String> {
+        let taken = takeover::take_over(&self.folder_of(id)?);
+        self.restart(id)?;
+        Ok(taken)
+    }
+
+    /// Lists what `force_start` would stop. Stops nothing.
+    pub fn preview_force_start(&self, id: &str) -> Result<Takeover, String> {
+        Ok(takeover::preview(&self.folder_of(id)?))
+    }
+
     /// Last 500 log lines, ANSI stripped. Empty for an unknown id.
     pub fn logs(&self, id: &str) -> Vec<String> {
         self.shared(id)
@@ -347,6 +360,16 @@ impl Manager {
         for id in &to_start {
             let _ = self.start(id);
         }
+    }
+
+    fn folder_of(&self, id: &str) -> Result<PathBuf, String> {
+        let reg = self.reg();
+        reg.config
+            .instances
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.folder.clone())
+            .ok_or_else(|| unknown(id))
     }
 
     fn shared(&self, id: &str) -> Result<Arc<Shared>, String> {

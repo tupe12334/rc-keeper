@@ -1,7 +1,7 @@
 // In-memory stand-in for the Tauri backend. Used when __TAURI_INTERNALS__ is absent
 // (browser dev, tests). Add `?demo` to the URL to start with two sample folders.
 import type { RcApi } from "./index";
-import type { InstanceConfig, InstanceStatus, InstanceView, State, UiSettings } from "./types";
+import type { InstanceConfig, InstanceStatus, InstanceView, State, TakeoverResult, UiSettings } from "./types";
 
 type Listener = (views: InstanceView[]) => void;
 
@@ -60,7 +60,7 @@ function newStatus(id: string, state: State): InstanceStatus {
 }
 
 function seed() {
-  const base = { chrome: true, permissionMode: null, spawn: null, capacity: null, createSessionInDir: null, sessionNamePrefix: null, extraArgs: [], autoTrust: true, autoStart: true };
+  const base = { chrome: true, permissionMode: null, spawn: null, capacity: null, createSessionInDir: null, sessionNamePrefix: null, extraArgs: [], autoTrust: true, autoStart: true, forceBoot: false };
   const a = { id: "demo-1", folder: "/Users/you/dev/app", name: "app", ...base };
   const b = { id: "demo-2", folder: "/Users/you/dev/site", name: null, ...base, autoStart: false };
   views.set(a.id, { config: a, status: { ...newStatus(a.id, "running"), pid: 4242, sessions: 2, uptimeSecs: 5400, restarts: 1, sessionUrls: ["https://claude.ai/code/session_demo1"] } });
@@ -110,6 +110,14 @@ export const mockApi: RcApi = {
     log(id, "restarting");
     later(id, 2000, "running");
     emit();
+  },
+  async forceStart(id: string): Promise<TakeoverResult> {
+    log(id, "took over the folder");
+    await mockApi.restartInstance(id);
+    return { stopped: [4321], respawnRisk: null };
+  },
+  async previewForceStart(): Promise<TakeoverResult> {
+    return { stopped: [4321], respawnRisk: null };
   },
   async getLogs(id: string) {
     return [...(logs.get(id) ?? [])];
