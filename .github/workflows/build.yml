@@ -232,9 +232,12 @@ jobs:
       - name: Install (macOS)
         if: runner.os == 'macOS'
         run: |
+          DL="$RUNNER_TEMP/dl"
+          DMG=$(find "$DL" -name '*.dmg' | head -n 1)
+          if [ -z "$DMG" ]; then echo "error: no .dmg under $DL" >&2; ls -R "$DL" >&2; exit 1; fi
           MNT="$RUNNER_TEMP/mnt"
           mkdir -p "$MNT"
-          hdiutil attach -nobrowse -quiet -mountpoint "$MNT" "$RUNNER_TEMP"/dl/*.dmg
+          hdiutil attach -nobrowse -quiet -mountpoint "$MNT" "$DMG"
           cp -R "$MNT/rc-keeper.app" /Applications/
           hdiutil detach -quiet "$MNT"
           xattr -dr com.apple.quarantine /Applications/rc-keeper.app
@@ -252,9 +255,12 @@ jobs:
       - name: Install and prepare (Linux)
         if: runner.os == 'Linux'
         run: |
+          DL="$RUNNER_TEMP/dl"
+          APPIMAGE=$(find "$DL" -name '*.AppImage' | head -n 1)
+          if [ -z "$APPIMAGE" ]; then echo "error: no .AppImage under $DL" >&2; ls -R "$DL" >&2; exit 1; fi
           sudo apt-get update
           sudo apt-get install -y xvfb
-          cp "$RUNNER_TEMP"/dl/*.AppImage "$RUNNER_TEMP/rc-keeper.AppImage"
+          cp "$APPIMAGE" "$RUNNER_TEMP/rc-keeper.AppImage"
           chmod +x "$RUNNER_TEMP/rc-keeper.AppImage"
 
       - name: Launch GUI and check alive (Linux)
@@ -273,7 +279,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $msi = Get-ChildItem "$env:RUNNER_TEMP\dl" -Filter *.msi | Select-Object -First 1
+          $dl = Join-Path $env:RUNNER_TEMP 'dl'
+          $msi = Get-ChildItem -Path $dl -Filter *.msi -Recurse | Select-Object -First 1
+          if (-not $msi) { Get-ChildItem -Path $dl -Recurse | Out-String | Write-Host; throw "no .msi under $dl" }
           $p = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /norestart" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "msiexec exit code $($p.ExitCode)" }
 
@@ -292,8 +300,11 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           set -eu
+          DL="$RUNNER_TEMP/dl"
+          ARCHIVE=$(find "$DL" -name "$CLI_ARCHIVE" | head -n 1)
+          if [ -z "$ARCHIVE" ]; then echo "error: no $CLI_ARCHIVE under $DL" >&2; ls -R "$DL" >&2; exit 1; fi
           mkdir -p "$RUNNER_TEMP/cli"
-          tar -xzf "$RUNNER_TEMP/dl/$CLI_ARCHIVE" -C "$RUNNER_TEMP/cli"
+          tar -xzf "$ARCHIVE" -C "$RUNNER_TEMP/cli"
           CLI="$RUNNER_TEMP/cli/$CLI_INNER"
           chmod +x "$CLI"
           "$CLI" version
@@ -306,7 +317,9 @@ jobs:
         shell: pwsh
         run: |
           $dir = Join-Path $env:RUNNER_TEMP 'cli'
-          Expand-Archive -Path (Join-Path $env:RUNNER_TEMP "dl\$env:CLI_ARCHIVE") -DestinationPath $dir -Force
+          $zip = Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP 'dl') -Filter $env:CLI_ARCHIVE -Recurse | Select-Object -First 1
+          if (-not $zip) { throw "no $env:CLI_ARCHIVE under dl" }
+          Expand-Archive -Path $zip.FullName -DestinationPath $dir -Force
           $cli = Join-Path $dir $env:CLI_INNER
           & $cli version
           if ($LASTEXITCODE -ne 0) { throw "version failed" }

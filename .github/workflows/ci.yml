@@ -36,6 +36,11 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
+      - name: Docs
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --workspace --no-deps --locked
+
   detect:
     name: Detect projects
     runs-on: ubuntu-latest
@@ -45,6 +50,7 @@ jobs:
     outputs:
       ui: ${{ steps.check.outputs.ui }}
       gui: ${{ steps.check.outputs.gui }}
+      docs: ${{ steps.check.outputs.docs }}
       release: ${{ steps.filter.outputs.release }}
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +70,7 @@ jobs:
         run: |
           if [ -f ui/package.json ]; then echo "ui=true" >> "$GITHUB_OUTPUT"; else echo "ui=false" >> "$GITHUB_OUTPUT"; fi
           if [ -f src-tauri/Cargo.toml ]; then echo "gui=true" >> "$GITHUB_OUTPUT"; else echo "gui=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -f scripts/check-generated-docs.sh ]; then echo "docs=true" >> "$GITHUB_OUTPUT"; else echo "docs=false" >> "$GITHUB_OUTPUT"; fi
 
   ui:
     name: UI (node 22)
@@ -151,6 +158,32 @@ jobs:
 
       - name: Test
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+
+  docs-drift:
+    name: Generated docs drift
+    needs: detect
+    if: needs.detect.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+
+      - name: Install UI dependencies
+        run: pnpm -C ui install --frozen-lockfile
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Check generated docs
+        run: scripts/check-generated-docs.sh
 
   # Builds every bundle and CLI archive without publishing, and smoke-tests them.
   release-check:
