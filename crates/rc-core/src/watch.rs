@@ -1,5 +1,5 @@
 //! Watches the config dir and its parent. Calls `reload` once config files settle.
-use notify::event::CreateKind;
+use notify::event::{AccessKind, AccessMode, CreateKind};
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -44,9 +44,7 @@ pub fn spawn(
             let received = rx.recv_timeout(timeout);
             let timed_out = matches!(received, Err(RecvTimeoutError::Timeout));
             match received {
-                // Opens are not changes. Linux inotify reports them for our own re-arm and reads,
-                // and reacting to them would re-arm and reload forever.
-                Ok(Ok(event)) if !matches!(event.kind, EventKind::Access(_)) => {
+                Ok(Ok(event)) if !is_read_only(&event.kind) => {
                     if event.paths.iter().any(|p| p == &dir) {
                         // The dir itself changed: re-watch the new inode, then reload from disk.
                         armed = arm(&mut watcher, &dir);
@@ -105,5 +103,32 @@ fn is_config_file(dir: &Path, path: &Path) -> bool {
             Some("settings.json" | "settings.local.json" | "config.json")
         ),
         _ => false,
+    }
+}
+
+/// Opens and reads change nothing. Our own reload reads files, and inotify reports each read,
+/// so reacting to them would reload forever. `Close(Write)` is a real write, so it stays.
+fn is_read_only(kind: &EventKind) -> bool {
+    matches!(kind, EventKind::Access(a) if *a != AccessKind::Close(AccessMode::Write))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notify::event::ModifyKind;
+
+    #[test]
+    fn only_reads_are_ignored() {
+        assert!(is_read_only(&EventKind::Access(AccessKind::Open(
+            AccessMode::Read
+        ))));
+        assert!(is_read_only(&EventKind::Access(AccessKind::Read)));
+        assert!(is_read_only(&EventKind::Access(AccessKind::Close(
+            AccessMode::Read
+        ))));
+        assert!(!is_read_only(&EventKind::Access(AccessKind::Close(
+            AccessMode::Write
+        ))));
+        assert!(!is_read_only(&EventKind::Modify(ModifyKind::Any)));
     }
 }

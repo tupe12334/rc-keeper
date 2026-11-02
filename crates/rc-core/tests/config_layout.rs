@@ -160,8 +160,7 @@ fn slug_collisions_get_suffixes() {
     for id in &ids {
         assert!(dir.join(format!("instances/{id}.json")).exists());
     }
-    // Editing never renames the file or the id. Look up by id: the watcher reloads in file-name
-    // order, which puts "work-2" before "work", so list position is not stable.
+    // Editing never renames the file or the id. Look up by id, not by list position.
     let by_id = |m: &Manager, id: &str| {
         m.list()
             .into_iter()
@@ -405,4 +404,19 @@ fn list_order_is_sorted_by_id_and_survives_reload() {
     .unwrap();
     assert!(within_two_seconds(|| ids(&m).contains(&"beta".to_owned())));
     assert_eq!(ids(&m), ["alpha", "beta", "mid", "zeta"]);
+}
+
+#[test]
+fn file_closed_after_write_reloads() {
+    use std::io::Write;
+    let dir = fresh_dir("close-write");
+    let m = Manager::load(dir.clone());
+    fs::create_dir_all(dir.join("instances")).unwrap();
+    {
+        // Written and closed in place, not renamed into place.
+        let mut f = fs::File::create(dir.join("instances/held.json")).unwrap();
+        f.write_all(b"{\n  \"id\": \"held\",\n  \"folder\": \"/srv/held\"\n}\n")
+            .unwrap();
+    }
+    assert!(within_two_seconds(|| ids(&m).contains(&"held".to_owned())));
 }
