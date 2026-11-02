@@ -38,6 +38,18 @@ fn autostart_releases_caller_stdout_pipe() {
     // EOF arrives only when every holder of the pipe's write end has closed it.
     let got = rx.recv_timeout(Duration::from_secs(30));
     let _ = child.wait();
+    // The daemon may bind after the CLI's own wait; poll so `daemon stop` never misses it.
+    for _ in 0..150 {
+        let up = run(&["daemon", "status"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success());
+        if up {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
     let _ = run(&["daemon", "stop"]).stdout(Stdio::null()).status();
     let _ = std::fs::remove_dir_all(&root);
 
