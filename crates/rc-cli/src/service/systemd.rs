@@ -55,8 +55,9 @@ pub fn install(dry_run: bool) -> Result<()> {
                     "no systemctl on this host (a container, WSL1, or a non-systemd init).\n\
                      The unit is at {}, for use on a systemd host.\n\
                      Here, keep the daemon running with your init system, or for now:\n  \
-                     nohup rc-keeper daemon >/dev/null 2>&1 &",
-                    path.display()
+                     nohup '{}' daemon >/dev/null 2>&1 &",
+                    path.display(),
+                    exe()?.display()
                 );
             }
             return Err(e);
