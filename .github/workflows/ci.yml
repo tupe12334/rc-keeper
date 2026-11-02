@@ -1,0 +1,204 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust workspace (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri Linux dependencies
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/linux-deps
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        if: runner.os == 'Linux'
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --locked
+
+      - name: Docs
+        if: runner.os == 'Linux'
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --workspace --no-deps --locked
+
+  detect:
+    name: Detect projects
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ui: ${{ steps.check.outputs.ui }}
+      gui: ${{ steps.check.outputs.gui }}
+      docs: ${{ steps.check.outputs.docs }}
+      release: ${{ steps.filter.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            release:
+              - '.github/**'
+              - 'src-tauri/**'
+              - 'crates/**'
+              - 'ui/**'
+              - 'install.sh'
+
+      - id: check
+        run: |
+          if [ -f ui/package.json ]; then echo "ui=true" >> "$GITHUB_OUTPUT"; else echo "ui=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -f src-tauri/Cargo.toml ]; then echo "gui=true" >> "$GITHUB_OUTPUT"; else echo "gui=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -f scripts/check-generated-docs.sh ]; then echo "docs=true" >> "$GITHUB_OUTPUT"; else echo "docs=false" >> "$GITHUB_OUTPUT"; fi
+
+  ui:
+    name: UI (node 22)
+    needs: detect
+    runs-on: ubuntu-latest
+    if: needs.detect.outputs.ui == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm version comes from the packageManager field in ui/package.json.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm -C ui install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -C ui typecheck
+
+      - name: Lint
+        run: pnpm -C ui lint
+
+      - name: Test
+        run: pnpm -C ui test
+
+      - name: Build
+        run: pnpm -C ui build
+
+  gui:
+    name: GUI shell (src-tauri, ubuntu)
+    needs: detect
+    runs-on: ubuntu-latest
+    if: needs.detect.outputs.gui == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri Linux dependencies
+        uses: ./.github/actions/linux-deps
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+
+      # Tauri needs ui/dist for frontendDist.
+      - name: Build UI
+        run: |
+          pnpm -C ui install --frozen-lockfile
+          pnpm -C ui build
+
+      # Tauri needs the CLI as a sidecar named for the host triple.
+      - name: Stage CLI sidecar
+        run: |
+          set -eu
+          cargo build -p rc-cli --release --locked
+          HOST=$(rustc -vV | sed -n 's/^host: //p')
+          mkdir -p src-tauri/binaries
+          cp target/release/rc-keeper "src-tauri/binaries/rc-keeper-$HOST"
+
+      - name: Format check
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
+
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+
+  docs-drift:
+    name: Generated docs drift
+    needs: detect
+    if: needs.detect.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+
+      - name: Install UI dependencies
+        run: pnpm -C ui install --frozen-lockfile
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Check generated docs
+        run: scripts/check-generated-docs.sh
+
+  # Builds every bundle and CLI archive without publishing, and smoke-tests them.
+  release-check:
+    name: Release build check
+    needs: detect
+    if: github.event_name == 'pull_request' && needs.detect.outputs.release == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build.yml
+    with:
+      publish: false

@@ -1,8 +1,8 @@
 use std::thread;
 
 use serde_json::{json, Value};
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::image::Image;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager as _};
 

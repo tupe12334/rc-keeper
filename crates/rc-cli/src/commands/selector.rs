@@ -1,6 +1,6 @@
 //! `<id|folder>` instance selector.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use rc_core::InstanceView;
@@ -12,9 +12,30 @@ pub fn canonical(path: &Path) -> Result<PathBuf> {
     Ok(strip_verbatim(p))
 }
 
-/// The canonical folder for a selector, if the selector names an existing folder.
-pub fn folder_of(selector: &str) -> Option<PathBuf> {
-    canonical(Path::new(selector)).ok()
+/// Canonical path when the folder exists. Otherwise an absolute path with `.` and `..` resolved
+/// lexically, so an instance whose folder was deleted can still be selected.
+pub fn resolve(path: &Path) -> PathBuf {
+    canonical(path).unwrap_or_else(|_| lexical(path))
+}
+
+fn lexical(path: &Path) -> PathBuf {
+    let abs = std::path::absolute(strip_verbatim(path.to_path_buf()))
+        .unwrap_or_else(|_| path.to_path_buf());
+    abs.components().fold(PathBuf::new(), |mut out, c| {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            c => out.push(c),
+        }
+        out
+    })
+}
+
+/// The resolved folder for a selector. Always returns a path, even for a folder that is gone.
+pub fn folder_of(selector: &str) -> PathBuf {
+    resolve(Path::new(selector))
 }
 
 /// Exact id wins. Otherwise a folder match. Errors on none or several.
@@ -25,11 +46,8 @@ pub fn select(
 ) -> Result<InstanceView> {
     let (by_id, rest): (Vec<_>, Vec<_>) = views.into_iter().partition(|v| v.config.id == selector);
     let mut hits = if by_id.is_empty() {
-        // Compare canonical paths: a stored folder may hold a symlink.
         rest.into_iter()
-            .filter(|v| {
-                folder.is_some_and(|f| canonical(&v.config.folder).ok().as_deref() == Some(f))
-            })
+            .filter(|v| folder.is_some_and(|f| resolve(&v.config.folder) == resolve(f)))
             .collect()
     } else {
         by_id
@@ -43,6 +61,10 @@ pub fn select(
 
 #[cfg(windows)]
 fn strip_verbatim(p: PathBuf) -> PathBuf {
+    // `\\?\UNC\server\share` is the network form of `\\server\share`.
+    if let Some(unc) = p.to_str().and_then(|s| s.strip_prefix(r"\\?\UNC\")) {
+        return PathBuf::from(format!(r"\\{unc}"));
+    }
     match p.to_str().and_then(|s| s.strip_prefix(r"\\?\")) {
         Some(s) => PathBuf::from(s),
         None => p,
@@ -52,6 +74,19 @@ fn strip_verbatim(p: PathBuf) -> PathBuf {
 #[cfg(not(windows))]
 fn strip_verbatim(p: PathBuf) -> PathBuf {
     p
+}
+
+#[cfg(windows)]
+#[test]
+fn verbatim_prefixes_are_stripped() {
+    assert_eq!(
+        strip_verbatim(PathBuf::from(r"\\?\UNC\server\share\x")),
+        PathBuf::from(r"\\server\share\x")
+    );
+    assert_eq!(
+        strip_verbatim(PathBuf::from(r"\\?\C:\x")),
+        PathBuf::from(r"C:\x")
+    );
 }
 
 #[cfg(test)]
@@ -124,6 +159,17 @@ mod tests {
         let found = select(views, canon.to_str().unwrap(), Some(&canon));
         let _ = std::fs::remove_dir_all(&base);
         assert_eq!(found.unwrap().config.id, "a");
+    }
+
+    #[test]
+    fn folder_selects_a_deleted_instance() {
+        let gone = std::env::temp_dir().join(format!("rck-gone-{}", std::process::id()));
+        let d = gone.to_str().unwrap();
+        let views = vec![view("a", d)];
+        assert_eq!(
+            select(views, d, Some(&resolve(&gone))).unwrap().config.id,
+            "a"
+        );
     }
 
     #[test]
