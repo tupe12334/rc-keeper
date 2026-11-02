@@ -8,9 +8,9 @@ description = "Supervisor core for rc-keeper: keeps `claude remote-control` runn
 portable-pty = "0.8"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+notify = "8.2.0"
 strip-ansi-escapes = "0.2.1"
 sysinfo = "0.40.1"
-uuid = { version = "1.29.0", features = ["v4"] }
 which = "8.0.6"
 
 [target."cfg(unix)".dependencies]

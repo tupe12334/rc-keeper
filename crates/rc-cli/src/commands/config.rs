@@ -1,6 +1,7 @@
 //! config get | set claude-bin <path>
 
 use anyhow::{bail, Result};
+use rc_ipc::config_dir;
 use serde_json::{json, Value};
 
 use super::connect;
@@ -22,5 +23,11 @@ pub fn set(key: &str, value: &str) -> Result<()> {
     let mut client = connect()?;
     client.call("set_settings", json!({ "claudeBin": value }))?;
     println!("claude-bin = {value}");
+    Ok(())
+}
+
+/// Prints the config dir. Does not contact the daemon.
+pub fn path() -> Result<()> {
+    println!("{}", config_dir().display());
     Ok(())
 }

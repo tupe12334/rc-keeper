@@ -6,22 +6,23 @@ use std::path::PathBuf;
 #[serde(rename_all = "camelCase", default)]
 pub struct InstanceConfig {
     pub id: String,
-    pub folder: PathBuf,
     pub name: Option<String>,
-    pub chrome: bool,
-    pub permission_mode: Option<String>,
-    pub spawn: Option<String>,
-    pub capacity: Option<u32>,
-    pub create_session_in_dir: Option<bool>,
-    pub session_name_prefix: Option<String>,
-    pub extra_args: Vec<String>,
-    pub auto_trust: bool,
+    pub folder: PathBuf,
     pub auto_start: bool,
+    pub auto_trust: bool,
+    pub capacity: Option<u32>,
+    pub chrome: bool,
+    pub create_session_in_dir: Option<bool>,
+    pub extra_args: Vec<String>,
+    pub permission_mode: Option<String>,
+    pub session_name_prefix: Option<String>,
+    pub spawn: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub claude_bin: Option<PathBuf>,
 }
 
