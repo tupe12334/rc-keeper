@@ -63,7 +63,19 @@ Change the clap definitions or the IPC types, then regenerate and commit the out
 
 ## Releases
 
-release-please opens a release PR on `main`. A maintainer merges that PR. The merge creates the tag and the GitHub release. The workflow then builds and smoke-tests the bundles.
+release-please opens a release PR on `main`. A maintainer merges that PR. The merge creates the tag and a draft GitHub release. The workflow then builds and smoke-tests the bundles, and publishes the release only after every build and smoke job passes.
+
+release-please can open the PR only if the repository setting **Allow GitHub Actions to create and approve pull requests** is on. Otherwise its run fails with `GitHub Actions is not permitted to create or approve pull requests`. A maintainer can then open the release PR with their own token. Run the dry run first:
+
+```sh
+npx release-please release-pr --repo-url=tupe12334/rc-keeper --target-branch=main \
+  --config-file=release-please-config.json --manifest-file=.release-please-manifest.json \
+  --token="$(gh auth token)" --dry-run
+```
+
+Run the same command without `--dry-run` to open the PR.
+
+To rebuild and smoke-test an existing release, run the **Release (manual)** workflow with its tag.
 
 See [`.github/workflows/release-please.yml`](.github/workflows/release-please.yml).
 
