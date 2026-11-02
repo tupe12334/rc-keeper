@@ -1,7 +1,7 @@
 import { ExternalLink, Pencil, Play, RotateCw, ScrollText, Square, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { api, type InstanceView } from "@/api";
+import { api, type InstanceView, type TakeoverResult } from "@/api";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,6 +20,8 @@ interface Props {
 export function InstanceCard({ view, onEdit, onLogs, onChanged }: Props) {
   const { config: cfg, status: st } = view;
   const [confirmRemove, setConfirmRemove] = useState(false);
+  /** What a take over would stop. Null while the confirm dialog is closed. */
+  const [takeover, setTakeover] = useState<TakeoverResult | null>(null);
   const title = cfg.name ?? cfg.folder.split(/[\\/]/).filter(Boolean).pop() ?? cfg.folder;
   const running = st.state === "running" || st.state === "starting" || st.state === "restarting";
 
@@ -35,6 +37,15 @@ export function InstanceCard({ view, onEdit, onLogs, onChanged }: Props) {
 
   const help = stateHelp[st.state];
 
+  // Asks the daemon what a take over would stop, then opens the confirm dialog with that list.
+  async function openTakeover() {
+    try {
+      setTakeover(await api.previewForceStart(cfg.id));
+    } catch (e) {
+      toast.error(String(e));
+    }
+  }
+
   return (
     <Card role="group" className="flex w-full flex-col gap-3 p-4" aria-label={`Folder ${title}`}>
       <div className="flex items-start justify-between gap-3">
@@ -48,6 +59,12 @@ export function InstanceCard({ view, onEdit, onLogs, onChanged }: Props) {
       </div>
 
       {help && <p className="text-sm text-muted-foreground">{help}</p>}
+
+      {st.state === "folder-busy" && (
+        <Button variant="outline" size="sm" className="self-start" onClick={() => void openTakeover()}>
+          Take over
+        </Button>
+      )}
 
       <dl className="grid grid-cols-3 gap-2 text-sm">
         <div>
@@ -100,6 +117,45 @@ export function InstanceCard({ view, onEdit, onLogs, onChanged }: Props) {
           </IconAction>
         </div>
       </div>
+
+      <Dialog open={takeover !== null} onOpenChange={(open) => !open && setTakeover(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Take over {title}?</DialogTitle>
+            <DialogDescription>Stops the claude remote-control process below, then starts this folder under rc-keeper.</DialogDescription>
+          </DialogHeader>
+          {takeover?.stopped.length ? (
+            <ul className="flex flex-col gap-1 font-mono text-sm" aria-label="Processes to stop">
+              {takeover.stopped.map((pid) => (
+                <li key={pid}>PID {pid}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">No other claude remote-control process was found. Nothing will stop.</p>
+          )}
+          {takeover?.respawnRisk && (
+            <p role="alert" className="break-words rounded-md bg-destructive/10 p-2 text-sm text-destructive">
+              Respawn risk: {takeover.respawnRisk}. That supervisor may start the stopped process again. Disable it first.
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setTakeover(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setTakeover(null);
+                void act(async () => {
+                  const result = await api.forceStart(cfg.id);
+                  toast.success(result.stopped.length ? "Stopped " + result.stopped.join(", ") : "Started. No other process stopped.");
+                });
+              }}
+            >
+              Take over folder
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
         <DialogContent className="max-w-sm">

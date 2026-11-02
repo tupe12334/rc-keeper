@@ -1,6 +1,10 @@
 //! Process-tree queries via sysinfo: session counts and killing leftover children.
 use std::collections::VecDeque;
+use std::thread;
+use std::time::{Duration, Instant};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+
+const EXIT_POLL: Duration = Duration::from_millis(100);
 
 /// Argument that marks a remote-control session child.
 const SESSION_FLAG: &str = "--sdk-url";
@@ -69,4 +73,48 @@ fn descendants(sys: &System, root: u32) -> Vec<Pid> {
         }
     }
     found
+}
+
+/// Stops `pids`. Unix: SIGTERM, then SIGKILL for any still alive after `grace`.
+/// Windows: terminates each process at once.
+#[cfg(unix)]
+pub fn terminate(pids: &[u32], grace: Duration) {
+    for &pid in pids {
+        signal(pid, libc::SIGTERM);
+    }
+    let until = Instant::now() + grace;
+    while Instant::now() < until && pids.iter().any(|&pid| alive(pid)) {
+        thread::sleep(EXIT_POLL);
+    }
+    for &pid in pids.iter().filter(|&&pid| alive(pid)) {
+        signal(pid, libc::SIGKILL);
+    }
+}
+
+#[cfg(not(unix))]
+pub fn terminate(pids: &[u32], _grace: Duration) {
+    let Ok(sys) = System::new() else {
+        return;
+    };
+    for &pid in pids {
+        if let Some(process) = sys.process(Pid::from_u32(pid)) {
+            process.kill();
+        }
+    }
+}
+
+#[cfg(unix)]
+fn signal(pid: u32, sig: libc::c_int) {
+    // SAFETY: plain kill(2) on one pid. A recycled pid is the only risk, and the caller holds the
+    // pid from a fresh scan made moments earlier.
+    unsafe {
+        libc::kill(pid as libc::pid_t, sig);
+    }
+}
+
+/// `kill(pid, 0)`: true while the process exists, including zombies not yet reaped.
+#[cfg(unix)]
+fn alive(pid: u32) -> bool {
+    // SAFETY: signal 0 only checks that the pid exists.
+    unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
 }

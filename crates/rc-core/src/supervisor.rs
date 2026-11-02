@@ -5,6 +5,7 @@ use crate::backoff::Backoff;
 use crate::model::{InstanceConfig, InstanceStatus, State};
 use crate::parser::{Event, Parser};
 use crate::procs;
+use crate::takeover;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::collections::VecDeque;
 use std::io::{Read, Write};
@@ -18,6 +19,8 @@ const LOG_LINES: usize = 500;
 /// Answers typed before the prompt is ready are ignored, so wait before answering.
 const TRUST_DELAY: Duration = Duration::from_secs(2);
 const POLL: Duration = Duration::from_millis(100);
+/// Pause after a takeover, so the stopped process can exit before the retry.
+const TAKEOVER_SETTLE: Duration = Duration::from_secs(1);
 
 /// Per-instance state shared by the manager and the supervisor thread.
 #[derive(Default)]
@@ -80,6 +83,20 @@ pub fn run(shared: Arc<Shared>, job: Job) {
             Outcome::NeedsTrust => {
                 shared.live().status.state = State::NeedsTrust;
                 return;
+            }
+            Outcome::Busy if job.cfg.force_boot => {
+                let taken = takeover::take_over(&job.cfg.folder);
+                if let Some(risk) = &taken.respawn_risk {
+                    eprintln!(
+                        "rc-core: {} may respawn a stopped rc: {risk}",
+                        job.cfg.folder.display()
+                    );
+                }
+                if taken.stopped.is_empty() {
+                    (State::FolderBusy, backoff.next_delay(ran_for))
+                } else {
+                    (State::FolderBusy, TAKEOVER_SETTLE)
+                }
             }
             Outcome::Busy => (State::FolderBusy, backoff.next_delay(ran_for)),
             Outcome::Exited => (State::Restarting, backoff.next_delay(ran_for)),

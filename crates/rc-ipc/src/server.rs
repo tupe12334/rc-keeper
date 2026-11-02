@@ -18,7 +18,9 @@ use crate::method::Method;
 use crate::paths::socket_path;
 use crate::paths::{canonical_config_dir, config_dir, socket_name};
 use crate::protocol::{Request, Response};
-use crate::schema::{CfgParams, GetSettingsResult, IdParams, PingResult, SetSettingsParams};
+use crate::schema::{
+    CfgParams, GetSettingsResult, IdParams, PingResult, SetSettingsParams, TakeoverResult,
+};
 
 /// Binds the daemon socket. Fails when a live daemon answers ping, on the new or the legacy socket.
 ///
@@ -294,6 +296,18 @@ fn dispatch(manager: &Manager, method: &str, params: &Value) -> Result<Value, St
             unit(manager.set_settings(Settings { claude_bin }))
         }
         Method::DetectClaudeBin => to_value(find_claude_bin(&manager.settings())),
+        Method::ForceStart => {
+            let IdParams { id } = parse(params)?;
+            manager
+                .force_start(&id)
+                .and_then(|taken| to_value(TakeoverResult::from(taken)))
+        }
+        Method::PreviewForceStart => {
+            let IdParams { id } = parse(params)?;
+            manager
+                .preview_force_start(&id)
+                .and_then(|taken| to_value(TakeoverResult::from(taken)))
+        }
     }
 }
 

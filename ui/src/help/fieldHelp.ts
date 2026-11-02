@@ -38,6 +38,7 @@ export type FieldKey =
   | "extraArgs"
   | "autoTrust"
   | "autoStart"
+  | "forceBoot"
   | "settings.claudeBin"
   | "settings.autostart";
 
@@ -114,6 +115,11 @@ export const FIELD_HELP: Record<FieldKey, FieldHelp> = {
     title: "Trust folder automatically",
     text: "Answers the trust prompt for this folder when it starts. Off leaves the folder in Needs trust until you trust it in Claude Code.",
     docUrl: RC_KEEPER_CONTRACT,
+  },
+  forceBoot: {
+    title: "Force boot",
+    text: "When another claude remote-control serves this folder, stops it and starts this instance. Off waits, retries, and leaves the other one running.",
+    docUrl: REMOTE_CONTROL,
   },
   autoStart: {
     title: "Start when the app opens",

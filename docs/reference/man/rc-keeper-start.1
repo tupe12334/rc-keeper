@@ -5,13 +5,16 @@
 .SH NAME
 rc\-keeper\-start \- Start an instance, or all with \-\-all
 .SH SYNOPSIS
-\fBrc\-keeper\-start\fR [\fB\-h\fR|\fB\-\-help\fR] <\fISELECTOR\fR|\fB\-\-all\fR> 
+\fBrc\-keeper\-start\fR [\fB\-\-force\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISELECTOR\fR|\fB\-\-all\fR> 
 .SH DESCRIPTION
 Start an instance, or all with \-\-all
 .SH OPTIONS
 .TP
 \fB\-\-all\fR
 Apply to every instance. Give either this or a selector, not both
+.TP
+\fB\-\-force\fR
+Stop the other `claude remote\-control` in the folder first, then start. Not with \-\-all
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

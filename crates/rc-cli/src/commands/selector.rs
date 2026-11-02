@@ -81,6 +81,7 @@ mod tests {
                 extra_args: vec![],
                 auto_trust: true,
                 auto_start: true,
+                force_boot: false,
             },
             status: InstanceStatus {
                 id: id.into(),

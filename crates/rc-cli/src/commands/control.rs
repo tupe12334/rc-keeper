@@ -50,3 +50,24 @@ pub fn run(action: Action, target: &Target) -> Result<()> {
     }
     Ok(())
 }
+
+/// `start --force`: stops the other claude rc in the folder, then starts the instance.
+pub fn force_start(target: &Target) -> Result<()> {
+    if target.all {
+        bail!("--force takes one instance, not --all")
+    }
+    let Some(selector) = &target.selector else {
+        bail!("give an instance or --all")
+    };
+    let mut client = connect()?;
+    let id = resolve(&mut client, selector)?.config.id;
+    let taken = client.call("force_start", json!({ "id": id }))?;
+    for pid in taken["stopped"].as_array().into_iter().flatten() {
+        println!("stopped pid {pid}");
+    }
+    if let Some(risk) = taken["respawnRisk"].as_str() {
+        eprintln!("warning: a supervisor may start the stopped rc again: {risk}. Disable it, or the folder is taken again.");
+    }
+    println!("started {id}");
+    Ok(())
+}

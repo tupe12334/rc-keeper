@@ -1,5 +1,5 @@
 // IPC wire types come from the generated schema types. Do not redefine them here.
-export type { InstanceConfig, InstanceStatus, InstanceView, State } from "./generated";
+export type { InstanceConfig, InstanceStatus, InstanceView, State, TakeoverResult } from "./generated";
 
 /** Result of the GUI command `get_settings`. Not an IPC type: the GUI owns autostart. */
 export interface UiSettings {

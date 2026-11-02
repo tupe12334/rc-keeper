@@ -55,4 +55,6 @@ Only one `claude remote-control` may serve a folder. "Force boot" stops the othe
 - Supervisor: if the foreign rc's parent is a supervisor that will respawn it (launchd, systemd, another rc-keeper), report that in the result (`respawnRisk: "<parent command>"`) so the user can disable it.
 - Per-instance option `forceBoot: bool` (default false): on folder-busy, take over automatically instead of backing off.
 - One-shot: IPC method `force_start({id}) -> {stopped: [pid], respawnRisk: string|null}`; Tauri command of the same name; CLI `rc-keeper start <sel> --force` and `rc-keeper add <folder> --force-boot`.
+- Preview: IPC method `preview_force_start({id})` returns the same shape and stops nothing. The UI confirm dialog uses it.
+- `forceBoot` is written to an instance file only when true, so files without it keep their bytes.
 - UI: a folder-busy card shows a "Take over" button (confirm dialog naming the PIDs it will stop); the form gets a "Force boot" switch with an info popover.

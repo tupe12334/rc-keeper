@@ -34,7 +34,7 @@
       "type": "object"
     },
     "IdParams": {
-      "description": "Params of `get_logs`, `remove_instance`, `start_instance`, `stop_instance`, `restart_instance`.",
+      "description": "Params of `get_logs`, `remove_instance`, `start_instance`, `stop_instance`, `restart_instance`,\n`force_start` and `preview_force_start`.",
       "properties": {
         "id": {
           "type": "string"
@@ -89,6 +89,11 @@
           "description": "Folder that `claude remote-control` runs in.",
           "type": "string"
         },
+        "forceBoot": {
+          "default": false,
+          "description": "Stop the other claude rc in the folder when this instance is folder-busy, then retry.",
+          "type": "boolean"
+        },
         "id": {
           "default": "",
           "description": "Stable id. Empty on `add_instance`: the daemon generates one.",
@@ -137,7 +142,8 @@
         "sessionNamePrefix",
         "extraArgs",
         "autoTrust",
-        "autoStart"
+        "autoStart",
+        "forceBoot"
       ],
       "type": "object"
     },
@@ -290,6 +296,31 @@
         "error"
       ],
       "type": "string"
+    },
+    "TakeoverResult": {
+      "description": "Result of `force_start` and `preview_force_start`. `stopped` lists the pids that were stopped\n(or, for a preview, that would be stopped).",
+      "properties": {
+        "respawnRisk": {
+          "description": "What may start a stopped process again, e.g. `launchd (ppid 1)`. Null when nothing was found.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stopped": {
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "stopped",
+        "respawnRisk"
+      ],
+      "type": "object"
     }
   },
   "description": "Params and results of each daemon method, keyed by method name.",
@@ -341,6 +372,21 @@
                 "string",
                 "null"
               ]
+            }
+          },
+          "required": [
+            "params",
+            "result"
+          ],
+          "type": "object"
+        },
+        "force_start": {
+          "properties": {
+            "params": {
+              "$ref": "#/definitions/IdParams"
+            },
+            "result": {
+              "$ref": "#/definitions/TakeoverResult"
             }
           },
           "required": [
@@ -407,6 +453,21 @@
             },
             "result": {
               "$ref": "#/definitions/PingResult"
+            }
+          },
+          "required": [
+            "params",
+            "result"
+          ],
+          "type": "object"
+        },
+        "preview_force_start": {
+          "properties": {
+            "params": {
+              "$ref": "#/definitions/IdParams"
+            },
+            "result": {
+              "$ref": "#/definitions/TakeoverResult"
             }
           },
           "required": [

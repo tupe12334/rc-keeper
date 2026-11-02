@@ -15,6 +15,7 @@ const cfg = (folder: string): InstanceConfig => ({
   extraArgs: [],
   autoTrust: true,
   autoStart: false,
+  forceBoot: false,
 });
 
 describe("mock api round-trip", () => {
