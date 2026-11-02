@@ -1,4 +1,4 @@
-//! config get | set claude-bin <path>
+//! config get | set claude-bin `<path>`
 
 use anyhow::{bail, Result};
 use rc_ipc::config_dir;

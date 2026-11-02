@@ -1,51 +1,13 @@
-// Mirrors CONTRACT.md. Keep in sync with rc-core (serde camelCase).
+// IPC wire types come from the generated schema types. Do not redefine them here.
+export type { InstanceConfig, InstanceStatus, InstanceView, State } from "./generated";
 
-export type State =
-  | "stopped"
-  | "starting"
-  | "running"
-  | "restarting"
-  | "folder-busy"
-  | "needs-trust"
-  | "error";
-
-export interface InstanceConfig {
-  id: string;
-  folder: string;
-  name: string | null;
-  chrome: boolean;
-  permissionMode: string | null;
-  spawn: string | null;
-  capacity: number | null;
-  createSessionInDir: boolean | null;
-  sessionNamePrefix: string | null;
-  extraArgs: string[];
-  autoTrust: boolean;
-  autoStart: boolean;
-}
-
-export interface InstanceStatus {
-  id: string;
-  state: State;
-  pid: number | null;
-  sessions: number;
-  uptimeSecs: number | null;
-  restarts: number;
-  nextRetrySecs: number | null;
-  lastError: string | null;
-  sessionUrls: string[];
-}
-
-export interface InstanceView {
-  config: InstanceConfig;
-  status: InstanceStatus;
-}
-
+/** Result of the GUI command `get_settings`. Not an IPC type: the GUI owns autostart. */
 export interface UiSettings {
   claudeBin: string | null;
   autostart: boolean;
 }
 
+/** Result of the GUI command `daemon_info`. Not an IPC type. */
 export interface DaemonInfo {
   version: string;
   running: boolean;

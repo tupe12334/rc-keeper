@@ -39,6 +39,18 @@ CI runs the checks in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on 
 
 Tests must use a temporary config folder. Never test against your real home folder or your real rc-keeper config.
 
+## API docs
+
+The CLI and IPC reference in [`docs/reference`](docs/reference) is generated from the code. So is `ui/src/api/generated.ts`, the UI's IPC types. Do not edit these files by hand.
+
+```sh
+pnpm -C ui install                  # once: the TypeScript step needs ui/node_modules
+cargo run -p xtask -- docs          # regenerate
+scripts/check-generated-docs.sh     # fails when the files are stale
+```
+
+Change the clap definitions or the IPC types, then regenerate and commit the output. The rustdoc for `rc-core` is generated too: `cargo doc -p rc-core --no-deps`.
+
 ## Commits and pull requests
 
 - Use conventional commit style for the PR title, for example `feat: add folder flags` or `fix: restart after exit`.

@@ -52,7 +52,7 @@ rc-keeper list
 rc-keeper status --json
 ```
 
-All commands are in the [CLI reference](../cli.md).
+All commands are in the [CLI reference](../reference/cli.md).
 
 ## Run the daemon at login
 
@@ -119,5 +119,5 @@ Check the state at any time with `rc-keeper status --json`.
 
 ## Related
 
-- [CLI reference](../cli.md)
+- [CLI reference](../reference/cli.md)
 - [How it works](../how-it-works.md)
