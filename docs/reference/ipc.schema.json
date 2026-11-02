@@ -225,8 +225,11 @@
       "type": "object"
     },
     "PingResult": {
-      "description": "Result of `ping`.",
+      "description": "Result of `ping`. `configDir` is the canonical config dir the daemon serves.",
       "properties": {
+        "configDir": {
+          "type": "string"
+        },
         "pid": {
           "format": "uint32",
           "minimum": 0,
@@ -238,7 +241,8 @@
       },
       "required": [
         "version",
-        "pid"
+        "pid",
+        "configDir"
       ],
       "type": "object"
     },

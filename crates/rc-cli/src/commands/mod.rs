@@ -24,7 +24,7 @@ pub fn fetch_views(client: &mut Client) -> Result<Vec<InstanceView>> {
 pub fn resolve(client: &mut Client, selector: &str) -> Result<InstanceView> {
     let views = fetch_views(client)?;
     let folder = selector::folder_of(selector);
-    selector::select(views, selector, folder.as_deref())
+    selector::select(views, selector, Some(&folder))
 }
 
 pub fn connect() -> Result<Client> {

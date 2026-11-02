@@ -750,6 +750,7 @@ dependencies = [
  "anyhow",
  "dirs",
  "interprocess",
+ "libc",
  "rc-core",
  "schemars",
  "serde",
