@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/tupe12334/rc-keeper/compare/v0.1.0...v0.1.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **ci:** upload Tauri bundles to the existing release by id ([#27](https://github.com/tupe12334/rc-keeper/issues/27)) ([0287a0d](https://github.com/tupe12334/rc-keeper/commit/0287a0d673a0619b1809f978c339074d7a00b783))
+
 ## 0.1.0 (2026-11-02)
 
 
