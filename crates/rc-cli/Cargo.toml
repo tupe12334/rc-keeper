@@ -1,0 +1,27 @@
+[package]
+name = "rc-cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "rc-keeper command line client and headless daemon"
+
+[[bin]]
+name = "rc-keeper"
+path = "src/main.rs"
+
+[dependencies]
+rc-core = { path = "../rc-core" }
+rc-ipc = { path = "../rc-ipc" }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+comfy-table = "8"
+ctrlc = { version = "3", features = ["termination"] }
+dirs = "7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+assert_cmd = "2"
