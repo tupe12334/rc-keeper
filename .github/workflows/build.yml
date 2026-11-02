@@ -259,7 +259,7 @@ jobs:
           APPIMAGE=$(find "$DL" -name '*.AppImage' | head -n 1)
           if [ -z "$APPIMAGE" ]; then echo "error: no .AppImage under $DL" >&2; ls -R "$DL" >&2; exit 1; fi
           sudo apt-get update
-          sudo apt-get install -y xvfb libegl1 libgl1
+          sudo apt-get install -y xvfb libgles2 libegl1 libgl1 mesa-utils
           cp "$APPIMAGE" "$RUNNER_TEMP/rc-keeper.AppImage"
           chmod +x "$RUNNER_TEMP/rc-keeper.AppImage"
 
@@ -267,6 +267,7 @@ jobs:
         if: runner.os == 'Linux'
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
         run: |
           APP="$RUNNER_TEMP/rc-keeper.AppImage"
           xvfb-run -a "$APP" &
