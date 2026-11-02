@@ -139,6 +139,17 @@ jobs:
         if: inputs.publish
         run: gh release upload "$TAG" "$CLI_ARCHIVE" --clobber
 
+      # tauri-action looks a release up by tag, and that lookup cannot see drafts, so with only
+      # tagName it created a second, public release next to the draft (v0.1.0). Resolve the
+      # existing release (draft or not) to its id and upload there.
+      - name: Resolve release id
+        id: release
+        if: inputs.publish
+        run: |
+          id=$(gh api "repos/$GH_REPO/releases" --paginate --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n 1)
+          [ -n "$id" ] || { echo "error: no release for tag $TAG" >&2; exit 1; }
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -146,11 +157,9 @@ jobs:
           projectPath: .
           # The repo root has no package.json. Run the Tauri CLI through npx instead.
           tauriScript: npx --yes @tauri-apps/cli@^2
-          # Empty tagName means build only. Set it to publish to the release.
-          tagName: ${{ inputs.publish && inputs.tag || '' }}
-          releaseName: "rc-keeper v__VERSION__"
-          releaseDraft: false
-          prerelease: false
+          # Empty releaseId means build only. With an id, tauri-action uploads to that release
+          # and never creates one.
+          releaseId: ${{ steps.release.outputs.id || '' }}
           args: ${{ matrix.args }}
 
       - name: Upload bundles and CLI as workflow artifacts
