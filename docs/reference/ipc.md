@@ -101,10 +101,11 @@ One folder that runs `claude remote-control`.
 
 ### PingResult
 
-Result of `ping`.
+Result of `ping`. `configDir` is the canonical config dir the daemon serves.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `configDir` | string | yes |  |
 | `pid` | integer | yes |  |
 | `version` | string | yes |  |
 

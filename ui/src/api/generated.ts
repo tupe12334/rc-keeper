@@ -152,9 +152,10 @@ export interface GetSettingsResult {
   claudeBin: string | null;
 }
 /**
- * Result of `ping`.
+ * Result of `ping`. `configDir` is the canonical config dir the daemon serves.
  */
 export interface PingResult {
+  configDir: string;
   pid: number;
   version: string;
 }
