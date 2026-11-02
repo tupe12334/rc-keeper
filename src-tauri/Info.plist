@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>rc-keeper runs Claude Code in the folders you add, so remote sessions can read and edit your files in Documents.</string>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>rc-keeper runs Claude Code in the folders you add, so remote sessions can read and edit your files on the Desktop.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>rc-keeper runs Claude Code in the folders you add, so remote sessions can read and edit your files in Downloads.</string>
+  <key>NSRemovableVolumesUsageDescription</key>
+  <string>rc-keeper runs Claude Code in the folders you add, so remote sessions can read and edit files on removable drives.</string>
+  <key>NSNetworkVolumesUsageDescription</key>
+  <string>rc-keeper runs Claude Code in the folders you add, so remote sessions can read and edit files on network drives.</string>
+</dict>
+</plist>
