@@ -98,6 +98,18 @@ Use the command-line tool on a headless server. You do not need a desktop or a d
 
 Check the state at any time with `rc-keeper status --json`.
 
+### No systemd (containers, WSL1)
+
+Some hosts have no `systemctl`, for example containers, WSL1, or a non-systemd init. On these hosts, `rc-keeper service install` writes the unit file, then stops with an error that tells you what to do. It exits non-zero, because no service was installed.
+
+Keep the daemon running with your own init system or process supervisor. As a quick option, start it in the background:
+
+```sh
+nohup rc-keeper daemon >/dev/null 2>&1 &
+```
+
+This daemon stops when the host restarts. Start it again after each restart.
+
 ## Uninstall
 
 1. Remove the service: `rc-keeper service uninstall`.
