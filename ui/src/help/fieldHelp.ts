@@ -123,7 +123,7 @@ export const FIELD_HELP: Record<FieldKey, FieldHelp> = {
   },
   autoStart: {
     title: "Start when the app opens",
-    text: "Starts this folder when rc-keeper starts. Off keeps it stopped until you start it.",
+    text: "Starts this folder when you add it and each time rc-keeper starts. Off keeps it stopped until you start it.",
     docUrl: RC_KEEPER_CONTRACT,
   },
   "settings.claudeBin": {

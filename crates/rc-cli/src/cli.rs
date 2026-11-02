@@ -218,7 +218,7 @@ pub struct InstanceFlags {
     /// Do not answer the folder trust prompt. You must trust the folder yourself. Not passed to `claude`.
     #[arg(long)]
     pub no_auto_trust: bool,
-    /// Start this instance when the daemon starts. On by default for `add`. Not passed to `claude`.
+    /// Start this instance now and each time the daemon starts. On by default for `add`. Not passed to `claude`.
     #[arg(long, conflicts_with = "no_auto_start")]
     pub auto_start: bool,
     /// Do not start this instance with the daemon. Start it with `rc-keeper start`. Not passed to `claude`.
@@ -294,6 +294,15 @@ pub fn run() -> i32 {
             return code;
         }
     };
+    let runs_daemon = matches!(
+        cli.command,
+        Command::Daemon {
+            action: None | Some(DaemonCmd::Run)
+        }
+    );
+    if !runs_daemon {
+        default_sigpipe();
+    }
     match dispatch(cli.command) {
         Ok(()) => 0,
         Err(e) => match e.downcast_ref::<Exit>() {
@@ -307,6 +316,17 @@ pub fn run() -> i32 {
                 }
             }
         },
+    }
+}
+
+/// Rust ignores SIGPIPE, so `println!` panics when the reader closes early, as in
+/// `rc-keeper status | head -1`. Client commands take the default: exit quietly.
+/// The daemon keeps ignoring it, so a client that hangs up mid-reply cannot kill it.
+fn default_sigpipe() {
+    #[cfg(unix)]
+    // SAFETY: called once at startup, before any thread starts; sets a plain disposition.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
 }
 

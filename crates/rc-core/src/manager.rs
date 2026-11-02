@@ -137,8 +137,19 @@ impl Manager {
         views
     }
 
-    /// Writes the instance file. An empty id is generated from the folder name.
-    pub fn add(&self, mut cfg: InstanceConfig) -> Result<String, String> {
+    /// Writes the instance file and starts it when `auto_start` is set, the same as a
+    /// file that appears on disk. An empty id is generated from the folder name.
+    pub fn add(&self, cfg: InstanceConfig) -> Result<String, String> {
+        let auto_start = cfg.auto_start;
+        let id = self.save_new(cfg)?;
+        if auto_start {
+            // A start failure (no claude binary) shows as the instance's state and last error.
+            let _ = self.start(&id);
+        }
+        Ok(id)
+    }
+
+    fn save_new(&self, mut cfg: InstanceConfig) -> Result<String, String> {
         let mut reg = self.reg();
         if cfg.id.is_empty() {
             let base = config::slug_of(&cfg.folder);
@@ -186,11 +197,17 @@ impl Manager {
         if known {
             self.stop(id)?;
         }
-        let mut reg = self.reg();
-        config::remove_instance(&self.inner.dir, id)?;
-        reg.config.instances.retain(|c| c.id != id);
-        reg.broken.remove(id);
-        reg.runs.remove(id);
+        let removed = {
+            let mut reg = self.reg();
+            config::remove_instance(&self.inner.dir, id)?;
+            reg.config.instances.retain(|c| c.id != id);
+            reg.broken.remove(id);
+            reg.runs.remove(id)
+        };
+        // A start that slipped in between the stop above and the removal is stopped here.
+        if let Some(shared) = removed {
+            stop_shared(&shared);
+        }
         Ok(())
     }
 
@@ -213,6 +230,15 @@ impl Manager {
         };
         // Lock order: lifecycle, then live.
         let _lifecycle = shared.lifecycle();
+        // Removed while we waited for the lifecycle lock: never spawn for a gone instance.
+        if !self
+            .reg()
+            .runs
+            .get(id)
+            .is_some_and(|s| Arc::ptr_eq(s, &shared))
+        {
+            return Err(unknown(id));
+        }
         let Some(bin) = find_claude_bin(&settings) else {
             let message = "claude binary not found".to_owned();
             let mut live = shared.live();
