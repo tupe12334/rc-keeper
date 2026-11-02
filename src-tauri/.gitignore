@@ -1,0 +1,3 @@
+# Sidecar copied in by CI or by hand for local builds; never committed.
+/binaries/
+/gen/schemas
