@@ -131,6 +131,8 @@ impl Manager {
                     },
                 }),
         );
+        // Ids are folder slugs, so this is alphabetical by folder name and stable across reloads.
+        views.sort_by(|a, b| a.config.id.cmp(&b.config.id));
         views
     }
 

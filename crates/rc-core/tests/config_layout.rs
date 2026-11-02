@@ -386,3 +386,23 @@ fn replaced_config_dir_is_reloaded_and_watched_again() {
     .unwrap();
     assert!(within_two_seconds(|| ids(&m).contains(&"later".to_owned())));
 }
+
+#[test]
+fn list_order_is_sorted_by_id_and_survives_reload() {
+    let dir = fresh_dir("stable-order");
+    let m = Manager::load(dir.clone());
+    // Added in reverse id order.
+    for folder in ["/srv/zeta", "/srv/mid", "/srv/alpha"] {
+        m.add(inst(folder)).unwrap();
+    }
+    assert_eq!(ids(&m), ["alpha", "mid", "zeta"]);
+
+    // A file written by hand triggers a watcher reload.
+    fs::write(
+        dir.join("instances/beta.json"),
+        "{\n  \"id\": \"beta\",\n  \"folder\": \"/srv/beta\"\n}\n",
+    )
+    .unwrap();
+    assert!(within_two_seconds(|| ids(&m).contains(&"beta".to_owned())));
+    assert_eq!(ids(&m), ["alpha", "beta", "mid", "zeta"]);
+}
