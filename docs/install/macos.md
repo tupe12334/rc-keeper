@@ -51,7 +51,7 @@ rc-keeper list
 rc-keeper status --json
 ```
 
-All commands are in the [CLI reference](../cli.md).
+All commands are in the [CLI reference](../reference/cli.md).
 
 ## Run the daemon at login
 
@@ -76,5 +76,5 @@ On macOS this installs a launchd agent named `io.github.tupe12334.rckeeper.daemo
 
 ## Related
 
-- [CLI reference](../cli.md)
+- [CLI reference](../reference/cli.md)
 - [How it works](../how-it-works.md)

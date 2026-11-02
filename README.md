@@ -36,7 +36,8 @@ irm https://raw.githubusercontent.com/tupe12334/rc-keeper/main/install.ps1 | iex
 - [Linux](docs/install/linux.md), including servers over SSH
 - [Windows](docs/install/windows.md)
 - [How it works](docs/how-it-works.md)
-- [CLI reference](docs/cli.md)
+- [CLI reference](docs/reference/cli.md)
+- [IPC reference](docs/reference/ipc.md)
 
 ## Security
 

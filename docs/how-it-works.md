@@ -11,4 +11,5 @@ The daemon owns all folders. The desktop app and the `rc-keeper` command are cli
 
 ## Related
 
-- [CLI reference](cli.md)
+- [CLI reference](reference/cli.md)
+- [IPC reference](reference/ipc.md)

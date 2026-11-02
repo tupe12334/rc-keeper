@@ -1,0 +1,17 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Generates the API reference under docs/reference from the code"
+publish = false
+
+[dependencies]
+anyhow = "1"
+clap = "4"
+clap-markdown = "0.1.5"
+clap_mangen = "0.3"
+rc-cli = { path = "../crates/rc-cli" }
+rc-ipc = { path = "../crates/rc-ipc" }
+schemars = "1"
+serde_json = "1"

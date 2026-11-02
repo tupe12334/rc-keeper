@@ -1,20 +1,21 @@
 //! Daemon side: accept connections, one thread each, dispatch methods onto the Manager.
 
 use std::io::{self, BufRead, BufReader, Write};
-use std::path::PathBuf;
 #[cfg(unix)]
 use std::sync::OnceLock;
 use std::thread;
 
 use anyhow::{bail, Context, Result};
 use interprocess::local_socket::{prelude::*, Listener, ListenerOptions, Stream};
-use rc_core::{find_claude_bin, InstanceConfig, Manager, Settings};
+use rc_core::{find_claude_bin, Manager, Settings};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 
 use crate::client::Client;
+use crate::method::Method;
 use crate::paths::{config_dir, socket_name, socket_path};
 use crate::protocol::{Request, Response};
+use crate::schema::{CfgParams, GetSettingsResult, IdParams, PingResult, SetSettingsParams};
 
 /// Binds the daemon socket. Fails when a live daemon answers ping.
 ///
@@ -152,38 +153,62 @@ fn handle(stream: Stream, manager: &Manager) {
 }
 
 fn dispatch(manager: &Manager, method: &str, params: &Value) -> Result<Value, String> {
+    let Some(method) = Method::from_name(method) else {
+        return Err(format!("unknown method: {method}"));
+    };
     match method {
-        "ping" => Ok(json!({ "version": env!("CARGO_PKG_VERSION"), "pid": std::process::id() })),
-        "shutdown" => Ok(Value::Null),
-        "list_instances" => to_value(manager.list()),
-        "add_instance" => manager.add(cfg_param(params)?).map(Value::from),
-        "update_instance" => unit(manager.update(cfg_param(params)?)),
-        "remove_instance" => unit(manager.remove(&str_param(params, "id")?)),
-        "start_instance" => unit(manager.start(&str_param(params, "id")?)),
-        "stop_instance" => unit(manager.stop(&str_param(params, "id")?)),
-        "restart_instance" => unit(manager.restart(&str_param(params, "id")?)),
-        "get_logs" => to_value(manager.logs(&str_param(params, "id")?)),
-        "start_all" => {
+        Method::Ping => to_value(PingResult {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            pid: std::process::id(),
+        }),
+        Method::Shutdown => Ok(Value::Null),
+        Method::ListInstances => to_value(manager.list()),
+        Method::AddInstance => {
+            let CfgParams { cfg } = parse(params)?;
+            manager.add(cfg).map(Value::from)
+        }
+        Method::UpdateInstance => {
+            let CfgParams { cfg } = parse(params)?;
+            unit(manager.update(cfg))
+        }
+        Method::RemoveInstance => {
+            let IdParams { id } = parse(params)?;
+            unit(manager.remove(&id))
+        }
+        Method::StartInstance => {
+            let IdParams { id } = parse(params)?;
+            unit(manager.start(&id))
+        }
+        Method::StopInstance => {
+            let IdParams { id } = parse(params)?;
+            unit(manager.stop(&id))
+        }
+        Method::RestartInstance => {
+            let IdParams { id } = parse(params)?;
+            unit(manager.restart(&id))
+        }
+        Method::GetLogs => {
+            let IdParams { id } = parse(params)?;
+            to_value(manager.logs(&id))
+        }
+        Method::StartAll => {
             manager.start_all();
             Ok(Value::Null)
         }
-        "stop_all" => {
+        Method::StopAll => {
             manager.stop_all();
             Ok(Value::Null)
         }
         // ponytail: GUI owns login autostart, so the daemon reports null for it.
-        "get_settings" => {
-            Ok(json!({ "claudeBin": manager.settings().claude_bin, "autostart": null }))
-        }
-        "set_settings" => {
-            let claude_bin = params
-                .get("claudeBin")
-                .and_then(Value::as_str)
-                .map(PathBuf::from);
+        Method::GetSettings => to_value(GetSettingsResult {
+            claude_bin: manager.settings().claude_bin,
+            autostart: (),
+        }),
+        Method::SetSettings => {
+            let SetSettingsParams { claude_bin } = parse(params)?;
             unit(manager.set_settings(Settings { claude_bin }))
         }
-        "detect_claude_bin" => to_value(find_claude_bin(&manager.settings())),
-        other => Err(format!("unknown method: {other}")),
+        Method::DetectClaudeBin => to_value(find_claude_bin(&manager.settings())),
     }
 }
 
@@ -195,17 +220,8 @@ fn to_value<T: serde::Serialize>(v: T) -> Result<Value, String> {
     serde_json::to_value(v).map_err(|e| e.to_string())
 }
 
-fn param<T: DeserializeOwned>(params: &Value, key: &str) -> Result<T, String> {
-    let v = params
-        .get(key)
-        .ok_or_else(|| format!("missing param: {key}"))?;
-    serde_json::from_value(v.clone()).map_err(|e| format!("bad param {key}: {e}"))
-}
-
-fn str_param(params: &Value, key: &str) -> Result<String, String> {
-    param(params, key)
-}
-
-fn cfg_param(params: &Value) -> Result<InstanceConfig, String> {
-    param(params, "cfg")
+/// Parses params into the same struct the docs describe. A missing `params` is `null`.
+fn parse<T: DeserializeOwned>(params: &Value) -> Result<T, String> {
+    let v = if params.is_null() { &json!({}) } else { params };
+    serde_json::from_value(v.clone()).map_err(|e| format!("bad params: {e}"))
 }

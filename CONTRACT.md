@@ -41,10 +41,7 @@ impl Manager {               // Send + Sync, cheap to clone (Arc inside)
 The Manager writes `<config_dir>/status.json` (Vec<InstanceView>) every 2 s.
 
 ## Tauri commands (names the UI invokes; args camelCase)
-`list_instances() -> InstanceView[]`, `add_instance({cfg}) -> string`, `update_instance({cfg})`,
-`remove_instance({id})`, `start_instance({id})`, `stop_instance({id})`, `restart_instance({id})`,
-`get_logs({id}) -> string[]`, `start_all()`, `stop_all()`, `get_settings() -> {claudeBin, autostart}`,
-`set_settings({claudeBin, autostart})`, `detect_claude_bin() -> string | null`.
+Tauri commands mirror the IPC method names. Signatures: see the [IPC reference](docs/reference/ipc.md).
 Event `instances` emitted every 1 s with `InstanceView[]`. Folder picker: `@tauri-apps/plugin-dialog` in the UI.
 CLI: `rc-keeper --status` prints `status.json` from the config dir and exits 0 (1 if absent).
 Config dir: Tauri `app_config_dir()` (identifier `io.github.tupe12334.rckeeper`).
@@ -53,15 +50,14 @@ Config dir: Tauri `app_config_dir()` (identifier `io.github.tupe12334.rckeeper`)
 The GUI no longer owns the Manager. One **daemon** per user owns it; the **CLI** and the **GUI** are clients.
 
 New crates (one owner each):
-- `crates/rc-ipc/` — protocol + client + server over a local socket (`interprocess` crate: Unix socket on macOS/Linux at `<config_dir>/rc-keeper.sock`, named pipe `rc-keeper-<user>` on Windows). JSON lines: request `{"id":n,"method":"<name>","params":{...}}` → response `{"id":n,"result":...}` or `{"id":n,"error":"..."}`. Methods = the Tauri command names above (`list_instances`, `add_instance`, …, `get_logs`, `start_all`, `stop_all`, `get_settings`, `set_settings` (claudeBin only), `detect_claude_bin`) plus `ping` → `{"version":"x.y.z"}` and `shutdown`. `pub fn config_dir() -> PathBuf` lives here (dirs crate + identifier `io.github.tupe12334.rckeeper`; macOS `~/Library/Application Support/<id>`, Linux `$XDG_CONFIG_HOME|~/.config/<id>`, Windows `%APPDATA%\<id>`). `pub struct Client { pub fn connect() -> Result<Client>; pub fn call(&mut self, method, params: Value) -> Result<Value> }`, `pub fn serve(manager: rc_core::Manager) -> !`.
-- `crates/rc-cli/` — binary **`rc-keeper`** (no GUI deps, builds on headless Linux). Subcommands (clap):
-  `daemon` (foreground; refuses if another daemon answers ping) · `status [--json]` · `list [--json]` · `add <folder> [--name] [--chrome|--no-chrome] [--permission-mode] [--spawn] [--capacity] [--create-session-in-dir|--no-create-session-in-dir] [--session-name-prefix] [--auto-trust/--no-auto-trust] [--no-auto-start] [-- extra args]` · `edit <id|folder> …same flags` · `remove <id|folder>` · `start|stop|restart <id|folder|--all>` · `logs <id|folder> [-f]` · `config get|set claude-bin <path>` · `service install|uninstall|status` (systemd user unit + `loginctl enable-linger` hint on Linux; launchd agent `io.github.tupe12334.rckeeper.daemon` with KeepAlive on macOS; Task Scheduler at logon on Windows) · `version`.
+- `crates/rc-ipc/` — protocol + client + server over a local socket (`interprocess` crate: Unix socket on macOS/Linux at `<config_dir>/rc-keeper.sock`, named pipe `rc-keeper-<user>` on Windows). JSON lines: request `{"id":n,"method":"<name>","params":{...}}` → response `{"id":n,"result":...}` or `{"id":n,"error":"..."}`. Methods: see the [IPC reference](docs/reference/ipc.md). `pub fn config_dir() -> PathBuf` lives here (dirs crate + identifier `io.github.tupe12334.rckeeper`; macOS `~/Library/Application Support/<id>`, Linux `$XDG_CONFIG_HOME|~/.config/<id>`, Windows `%APPDATA%\<id>`). `pub struct Client { pub fn connect() -> Result<Client>; pub fn call(&mut self, method, params: Value) -> Result<Value> }`, `pub fn serve(manager: rc_core::Manager) -> !`.
+- `crates/rc-cli/` — binary **`rc-keeper`** (no GUI deps, builds on headless Linux). Subcommands and flags: see [CLI reference](docs/reference/cli.md).
   Any client command auto-starts the daemon (detached) if ping fails. Human output = aligned table; `--json` = machine output. Exit codes: 0 ok, 1 error, 2 daemon unreachable.
 - GUI (`src-tauri`) binary name **`rc-keeper-gui`**; bundles `rc-keeper` as a Tauri sidecar (`externalBin`), on launch connects via `rc_ipc::Client`, spawning the sidecar `rc-keeper daemon` if ping fails. Tauri commands proxy to the IPC client; the `instances` event polls `list_instances` every 1 s. Quitting the GUI does NOT stop the daemon (tray menu offers "Stop daemon"). `--status` moves to the CLI (`rc-keeper status --json`).
 - Releases ship: GUI bundles per OS **and** standalone CLI archives `rc-keeper-<target>.tar.gz` / `.zip` (x86_64 + aarch64 Linux, universal macOS, x86_64 Windows). `install.sh --cli` (auto when no `$DISPLAY`/`$WAYLAND_DISPLAY` on Linux) installs only the CLI to `~/.local/bin`.
-- Extra GUI-only Tauri commands: `daemon_info() -> {version: string, running: boolean}` (IPC `ping`) and `stop_daemon()` (IPC `shutdown`).
-- Allowed values: permissionMode ∈ `acceptEdits|auto|bypassPermissions|default|dontAsk|plan`; spawn ∈ `same-dir|worktree|session` (from `claude remote-control --help`, v2.1.316).
-- CLI daemon group: `rc-keeper daemon` / `daemon run` (foreground), `daemon stop` (IPC `shutdown`; exit 0 also when not running), `daemon status [--json]` (exit 0 running, 2 not running).
+- GUI-only Tauri commands map onto IPC `ping` and `shutdown`. See the [IPC reference](docs/reference/ipc.md).
+- Allowed values: see the field descriptions in the [IPC reference](docs/reference/ipc.md) (from `claude remote-control --help`, v2.1.316).
+- Daemon subcommands and exit codes: see the [CLI reference](docs/reference/cli.md).
 - Every crate `Cargo.toml` and `src-tauri/Cargo.toml` uses a literal `version = "x.y.z"` (no `version.workspace`), so release-please can bump it.
 - Service restart semantics: the OS service restarts the daemon only on failure (systemd `Restart=on-failure`, launchd `KeepAlive.SuccessfulExit=false`), so `rc-keeper daemon stop` stays stopped. Socket: config dir 0700, socket 0600.
 
