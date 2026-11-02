@@ -29,6 +29,17 @@ pub fn sdk_sessions(sys: &System, root: u32) -> u32 {
     count as u32
 }
 
+/// Kills the whole process group led by `pid`. The PTY child calls `setsid()`, so its pid is
+/// the group id. Orphans keep the group id even after their parent is gone.
+#[cfg(unix)]
+pub fn kill_group(pid: u32) {
+    // ponytail: a recycled pid could match an unrelated group. Rare, accepted.
+    // SAFETY: a negative pid targets a process group. It is harmless when the group is empty.
+    unsafe {
+        libc::kill(-(pid as libc::pid_t), libc::SIGKILL);
+    }
+}
+
 /// Kills every descendant of `root`, then runs `kill_root`. Descendants are listed first,
 /// because orphans lose their parent link once `root` dies.
 pub fn kill_tree(root: u32, kill_root: impl FnOnce()) {

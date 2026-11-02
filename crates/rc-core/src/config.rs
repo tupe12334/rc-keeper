@@ -1,7 +1,7 @@
 //! On-disk files: `config.json` (instances and settings) and `status.json` (read by the CLI).
 use crate::model::{AppConfig, InstanceView};
 use std::fs;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Write};
 use std::path::Path;
 
 pub const CONFIG_FILE: &str = "config.json";
@@ -30,7 +30,11 @@ pub fn write_status(dir: &Path, views: &[InstanceView]) -> Result<(), String> {
 /// Writes to a temp file, then renames, so readers never see a half-written file.
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, bytes)
-        .and_then(|_| fs::rename(&tmp, path))
-        .map_err(|e| format!("cannot write {}: {e}", path.display()))
+    let result = fs::File::create(&tmp)
+        .and_then(|mut f| {
+            f.write_all(bytes)?;
+            f.sync_all()
+        })
+        .and_then(|_| fs::rename(&tmp, path));
+    result.map_err(|e| format!("cannot write {}: {e}", path.display()))
 }

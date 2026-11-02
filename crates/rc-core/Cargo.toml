@@ -12,3 +12,6 @@ strip-ansi-escapes = "0.2.1"
 sysinfo = "0.40.1"
 uuid = { version = "1.29.0", features = ["v4"] }
 which = "8.0.6"
+
+[target."cfg(unix)".dependencies]
+libc = "0.2"

@@ -23,6 +23,8 @@ const POLL: Duration = Duration::from_millis(100);
 #[derive(Default)]
 pub struct Shared {
     pub stop: AtomicBool,
+    /// Serializes start and stop for this instance. Taken before `live`.
+    lifecycle: Mutex<()>,
     live: Mutex<Live>,
 }
 
@@ -39,6 +41,10 @@ impl Shared {
         let shared = Self::default();
         shared.live().status.id = id.to_owned();
         shared
+    }
+
+    pub fn lifecycle(&self) -> MutexGuard<'_, ()> {
+        self.lifecycle.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn live(&self) -> MutexGuard<'_, Live> {
@@ -159,7 +165,9 @@ fn run_once(shared: &Shared, job: &Job) -> Outcome {
         shared,
         auto_trust: job.cfg.auto_trust,
         answer_at: None,
-        run_error: false,
+        answered: false,
+        question_seen: false,
+        ready: false,
     };
     let outcome = loop {
         if shared.stop.load(Ordering::SeqCst) {
@@ -167,6 +175,8 @@ fn run_once(shared: &Shared, job: &Job) -> Outcome {
         }
         if session.answer_at.is_some_and(|at| Instant::now() >= at) {
             session.answer_at = None;
+            session.answered = true;
+            session.question_seen = false;
             let _ = writer.write_all(b"y\r");
             let _ = writer.flush();
         }
@@ -192,15 +202,22 @@ fn run_once(shared: &Shared, job: &Job) -> Outcome {
         }
     };
 
-    if !matches!(outcome, Outcome::Exited) {
-        match pid {
-            Some(pid) => procs::kill_tree(pid, || {
-                let _ = child.kill();
-            }),
-            None => {
-                let _ = child.kill();
+    // Kill leftovers on every exit path, so the PTY slave closes and the reader thread ends.
+    let exited = matches!(outcome, Outcome::Exited);
+    match pid {
+        Some(pid) => {
+            if !exited || cfg!(not(unix)) {
+                procs::kill_tree(pid, || {
+                    let _ = child.kill();
+                });
             }
+            #[cfg(unix)]
+            procs::kill_group(pid);
         }
+        None if !exited => {
+            let _ = child.kill();
+        }
+        None => {}
     }
     let _ = child.wait();
     {
@@ -221,8 +238,14 @@ fn fail(shared: &Shared, message: String) -> Outcome {
 struct Session<'a> {
     shared: &'a Shared,
     auto_trust: bool,
+    /// When the trust answer is due. Set by the first trust prompt of the run.
     answer_at: Option<Instant>,
-    run_error: bool,
+    /// True once the trust answer was sent. At most one answer per run.
+    answered: bool,
+    /// True once the trust question text appeared. Blocks the Running state until answered.
+    question_seen: bool,
+    /// True once a session URL appeared. Later trust prompts are ignored.
+    ready: bool,
 }
 
 impl Session<'_> {
@@ -236,13 +259,25 @@ impl Session<'_> {
     fn on_event(&mut self, event: Event) -> Option<Outcome> {
         match event {
             Event::FolderBusy => return Some(Outcome::Busy),
-            Event::TrustPrompt if !self.auto_trust => return Some(Outcome::NeedsTrust),
+            Event::TrustQuestion => self.question_seen = true,
             Event::TrustPrompt => {
-                self.answer_at.get_or_insert(Instant::now() + TRUST_DELAY);
+                self.question_seen = true;
+                let answerable = !self.ready
+                    && !self.answered
+                    && self.answer_at.is_none()
+                    && self.shared.live().status.state != State::Running;
+                if !answerable {
+                    // Logged as a plain line by the parser. Never answered.
+                } else if self.auto_trust {
+                    self.answer_at = Some(Instant::now() + TRUST_DELAY);
+                } else {
+                    return Some(Outcome::NeedsTrust);
+                }
             }
             Event::Output => {
                 let mut live = self.shared.live();
-                if live.status.state == State::Starting && !self.run_error {
+                let trust_pending = self.question_seen && !self.answered;
+                if live.status.state == State::Starting && !trust_pending {
                     live.status.state = State::Running;
                 }
             }
@@ -254,10 +289,10 @@ impl Session<'_> {
                 live.log.push_back(line);
             }
             Event::Error(message) => {
-                self.run_error = true;
                 self.shared.live().status.last_error = Some(message);
             }
             Event::SessionUrl(url) => {
+                self.ready = true;
                 let mut live = self.shared.live();
                 if !live.status.session_urls.contains(&url) {
                     live.status.session_urls.push(url);

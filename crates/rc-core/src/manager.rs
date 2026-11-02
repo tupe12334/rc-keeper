@@ -45,9 +45,17 @@ impl Manager {
             );
             AppConfig::default()
         });
+        let mut generated = false;
         for cfg in &mut config.instances {
             if cfg.id.is_empty() {
                 cfg.id = new_id();
+                generated = true;
+            }
+        }
+        if generated {
+            // Clients hold these ids, so they must survive a restart.
+            if let Err(e) = write_config(&config_dir, &config) {
+                eprintln!("rc-core: {e}");
             }
         }
         let runs = config
@@ -152,6 +160,8 @@ impl Manager {
             let shared = reg.runs.get(id).ok_or_else(|| unknown(id))?.clone();
             (cfg, shared, reg.config.settings.clone())
         };
+        // Lock order: lifecycle, then live.
+        let _lifecycle = shared.lifecycle();
         let Some(bin) = find_claude_bin(&settings) else {
             let message = "claude binary not found".to_owned();
             let mut live = shared.live();
@@ -176,8 +186,10 @@ impl Manager {
     /// Stops the instance and waits until its child is gone.
     pub fn stop(&self, id: &str) -> Result<(), String> {
         let shared = self.shared(id)?;
+        // Held for the whole call, so a concurrent start cannot clear the stop flag early.
+        let _lifecycle = shared.lifecycle();
         shared.stop.store(true, Ordering::SeqCst);
-        // Take the handle out first, so the lock is free while the thread finishes.
+        // Take the handle out first, so the live lock is free while the thread finishes.
         let worker = shared.live().thread.take();
         if let Some(worker) = worker {
             let _ = worker.join();
@@ -274,9 +286,11 @@ impl Manager {
     fn publish(&self, sys: &sysinfo::System) {
         let shared: Vec<Arc<Shared>> = self.reg().runs.values().cloned().collect();
         for shared in shared {
-            let mut live = shared.live();
-            if let Some(pid) = live.status.pid {
-                live.status.sessions = procs::sdk_sessions(sys, pid);
+            // Read the pid under the lock, scan with the lock released, then write back.
+            let pid = shared.live().status.pid;
+            if let Some(pid) = pid {
+                let sessions = procs::sdk_sessions(sys, pid);
+                shared.live().status.sessions = sessions;
             }
         }
         if let Err(e) = write_status(&self.inner.dir, &self.list()) {

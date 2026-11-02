@@ -5,18 +5,25 @@ use std::rc::Rc;
 use strip_ansi_escapes::Writer as AnsiStripper;
 
 const BUSY: &str = "already served by a terminal";
-const TRUST: &str = "[y/N]";
+const PROMPT: &str = "[y/N]";
+const TRUST_QUESTION: &str = "Quick safety check";
+const TRUST_WORD: &str = "Trust";
 const SESSION_URL: &str = "https://claude.ai/code";
 /// Unfinished-line cap. Keeps memory flat when a program prints without newlines.
 const MAX_PARTIAL: usize = 4096;
+/// Trust text must sit within this many bytes before a `[y/N]` prompt.
+const TRUST_WINDOW: usize = 2048;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
-    /// Some output arrived.
+    /// Some output arrived. Always the last event of a chunk.
     Output,
     /// One complete line, ANSI stripped, without its line break.
     Line(String),
     FolderBusy,
+    /// The trust question text appeared. The prompt may follow later.
+    TrustQuestion,
+    /// A `[y/N]` that asks about trusting the folder.
     TrustPrompt,
     Error(String),
     SessionUrl(String),
@@ -43,6 +50,8 @@ pub struct Parser {
     utf8_rest: Vec<u8>,
     /// Text after the last line break. Prompts arrive here because they have no newline.
     partial: String,
+    /// Last `TRUST_WINDOW` bytes of clean output. Trust text must appear here.
+    window: String,
 }
 
 impl Parser {
@@ -53,6 +62,7 @@ impl Parser {
             clean,
             utf8_rest: Vec::new(),
             partial: String::new(),
+            window: String::new(),
         }
     }
 
@@ -66,22 +76,32 @@ impl Parser {
         let bytes = std::mem::take(&mut *self.clean.borrow_mut());
         let text = self.decode(bytes);
 
-        let mut events = vec![Event::Output];
+        self.window.push_str(&text);
+        keep_tail(&mut self.window, TRUST_WINDOW);
         self.partial.push_str(&text);
+
+        let mut events = Vec::new();
         while let Some(pos) = self.partial.find('\n') {
             let raw: String = self.partial.drain(..=pos).collect();
-            classify_line(raw.trim_end_matches(['\r', '\n']), &mut events);
+            self.classify_line(raw.trim_end_matches(['\r', '\n']), &mut events);
         }
-        // Prompts and busy notices may sit on an unfinished line.
+        // Busy notices and prompts may sit on an unfinished line.
         if self.partial.contains(BUSY) {
             events.push(Event::FolderBusy);
             self.partial.clear();
         }
-        if self.partial.contains(TRUST) {
-            events.push(Event::TrustPrompt);
-            self.partial.clear();
+        if self.partial.contains(TRUST_QUESTION) {
+            events.push(Event::TrustQuestion);
         }
-        self.trim_partial();
+        if self.partial.contains(PROMPT) {
+            let line = std::mem::take(&mut self.partial);
+            if self.is_trust_prompt(&line) {
+                events.push(Event::TrustPrompt);
+            }
+            events.push(Event::Line(line));
+        }
+        keep_tail(&mut self.partial, MAX_PARTIAL);
+        events.push(Event::Output);
         events
     }
 
@@ -116,39 +136,60 @@ impl Parser {
         out
     }
 
-    fn trim_partial(&mut self) {
-        if self.partial.len() <= MAX_PARTIAL {
-            return;
+    fn classify_line(&self, line: &str, events: &mut Vec<Event>) {
+        if line.contains(BUSY) {
+            events.push(Event::FolderBusy);
         }
-        let mut cut = self.partial.len() - MAX_PARTIAL / 2;
-        while !self.partial.is_char_boundary(cut) {
-            cut += 1;
+        if line.contains(TRUST_QUESTION) {
+            events.push(Event::TrustQuestion);
         }
-        self.partial.drain(..cut);
+        if line.contains(PROMPT) && self.is_trust_prompt(line) {
+            events.push(Event::TrustPrompt);
+        }
+        let trimmed = line.trim();
+        if trimmed.starts_with("Error:")
+            || line.contains("ECONNRESET")
+            || line.contains("ENOTFOUND")
+        {
+            events.push(Event::Error(trimmed.to_owned()));
+        }
+        if let Some(start) = line.find(SESSION_URL) {
+            let url = line[start..]
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .trim_end_matches(['.', ',', ';', ')']);
+            events.push(Event::SessionUrl(url.to_owned()));
+        }
+        events.push(Event::Line(line.to_owned()));
+    }
+
+    /// A prompt is a trust prompt when it shares a line with "Trust", or when the
+    /// trust question sits in the recent output.
+    fn is_trust_prompt(&self, line: &str) -> bool {
+        line.contains(TRUST_WORD) || self.window.contains(TRUST_QUESTION)
     }
 }
 
-fn classify_line(line: &str, events: &mut Vec<Event>) {
-    if line.contains(BUSY) {
-        events.push(Event::FolderBusy);
+/// Drops the oldest bytes so that at most `max` remain, cutting on a char boundary.
+fn keep_tail(text: &mut String, max: usize) {
+    if text.len() <= max {
+        return;
     }
-    if line.contains(TRUST) {
-        events.push(Event::TrustPrompt);
+    let mut cut = text.len() - max;
+    while !text.is_char_boundary(cut) {
+        cut += 1;
     }
-    let trimmed = line.trim();
-    if trimmed.starts_with("Error:") || line.contains("ECONNRESET") || line.contains("ENOTFOUND") {
-        events.push(Event::Error(trimmed.to_owned()));
-    }
-    if let Some(start) = line.find(SESSION_URL) {
-        let url = line[start..].split_whitespace().next().unwrap_or_default();
-        events.push(Event::SessionUrl(url.to_owned()));
-    }
-    events.push(Event::Line(line.to_owned()));
+    text.drain(..cut);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn trust_count(events: &[Event]) -> usize {
+        events.iter().filter(|e| **e == Event::TrustPrompt).count()
+    }
 
     #[test]
     fn busy_line_is_folder_busy() {
@@ -161,8 +202,31 @@ mod tests {
         let mut parser = Parser::new();
         let mut events = parser.feed(b"Trust this folder? [");
         events.extend(parser.feed(b"y/N] "));
-        let prompts = events.iter().filter(|e| **e == Event::TrustPrompt).count();
-        assert_eq!(prompts, 1);
+        assert_eq!(trust_count(&events), 1);
+    }
+
+    #[test]
+    fn trust_question_then_prompt_is_trust() {
+        let mut parser = Parser::new();
+        let mut events = parser.feed(b"Quick safety check: is this a project you trust?\n");
+        events.extend(parser.feed(b"Continue? [y/N] "));
+        assert_eq!(trust_count(&events), 1);
+    }
+
+    #[test]
+    fn prompt_without_trust_text_is_not_trust() {
+        let events = Parser::new().feed(b"Overwrite stale session? [y/N] ");
+        assert_eq!(trust_count(&events), 0);
+        assert!(events.contains(&Event::Line("Overwrite stale session? [y/N] ".into())));
+    }
+
+    #[test]
+    fn prompt_far_after_trust_text_is_not_trust() {
+        let mut parser = Parser::new();
+        let mut events = parser.feed(b"Quick safety check: is this a project you trust?\n");
+        events.extend(parser.feed("x".repeat(3000).as_bytes()));
+        events.extend(parser.feed(b" Continue? [y/N] "));
+        assert_eq!(trust_count(&events), 0);
     }
 
     #[test]
@@ -174,6 +238,14 @@ mod tests {
     #[test]
     fn session_url_is_extracted() {
         let events = Parser::new().feed(b"Open https://claude.ai/code/session_1 now\r\n");
+        assert!(events.contains(&Event::SessionUrl(
+            "https://claude.ai/code/session_1".into()
+        )));
+    }
+
+    #[test]
+    fn session_url_drops_trailing_punctuation() {
+        let events = Parser::new().feed(b"(see https://claude.ai/code/session_1).\n");
         assert!(events.contains(&Event::SessionUrl(
             "https://claude.ai/code/session_1".into()
         )));
