@@ -1,5 +1,6 @@
 //! Watches the config dir and its parent. Calls `reload` once config files settle.
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use notify::event::CreateKind;
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
@@ -43,16 +44,22 @@ pub fn spawn(
             let received = rx.recv_timeout(timeout);
             let timed_out = matches!(received, Err(RecvTimeoutError::Timeout));
             match received {
-                Ok(Ok(event)) => {
+                // Opens are not changes. Linux inotify reports them for our own re-arm and reads,
+                // and reacting to them would re-arm and reload forever.
+                Ok(Ok(event)) if !matches!(event.kind, EventKind::Access(_)) => {
                     if event.paths.iter().any(|p| p == &dir) {
                         // The dir itself changed: re-watch the new inode, then reload from disk.
                         armed = arm(&mut watcher, &dir);
                         dirty_since.get_or_insert_with(Instant::now);
                     }
-                    if event.paths.iter().any(|p| is_config_file(&dir, p)) {
+                    // A new subfolder (`instances/`) gets its watch a moment later, so files
+                    // written into it meanwhile produce no events. Reload to read them.
+                    let new_folder = matches!(event.kind, EventKind::Create(CreateKind::Folder));
+                    if new_folder || event.paths.iter().any(|p| is_config_file(&dir, p)) {
                         dirty_since.get_or_insert_with(Instant::now);
                     }
                 }
+                Ok(Ok(_)) => {}
                 Ok(Err(_)) => {
                     dirty_since.get_or_insert_with(Instant::now);
                 }

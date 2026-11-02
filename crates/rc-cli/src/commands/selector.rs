@@ -24,12 +24,11 @@ pub fn select(
     folder: Option<&Path>,
 ) -> Result<InstanceView> {
     let (by_id, rest): (Vec<_>, Vec<_>) = views.into_iter().partition(|v| v.config.id == selector);
+    // Canonicalize both sides: a stored folder may hold a symlink, and callers may pass a raw path.
+    let wanted = folder.and_then(|f| canonical(f).ok());
     let mut hits = if by_id.is_empty() {
-        // Compare canonical paths: a stored folder may hold a symlink.
         rest.into_iter()
-            .filter(|v| {
-                folder.is_some_and(|f| canonical(&v.config.folder).ok().as_deref() == Some(f))
-            })
+            .filter(|v| wanted.is_some() && canonical(&v.config.folder).ok() == wanted)
             .collect()
     } else {
         by_id
@@ -43,6 +42,10 @@ pub fn select(
 
 #[cfg(windows)]
 fn strip_verbatim(p: PathBuf) -> PathBuf {
+    // `\\?\UNC\server\share` is the network form of `\\server\share`.
+    if let Some(unc) = p.to_str().and_then(|s| s.strip_prefix(r"\\?\UNC\")) {
+        return PathBuf::from(format!(r"\\{unc}"));
+    }
     match p.to_str().and_then(|s| s.strip_prefix(r"\\?\")) {
         Some(s) => PathBuf::from(s),
         None => p,

@@ -160,11 +160,19 @@ fn slug_collisions_get_suffixes() {
     for id in &ids {
         assert!(dir.join(format!("instances/{id}.json")).exists());
     }
-    // Editing never renames the file or the id.
-    let mut cfg = m.list()[1].config.clone();
+    // Editing never renames the file or the id. Look up by id: the watcher reloads in file-name
+    // order, which puts "work-2" before "work", so list position is not stable.
+    let by_id = |m: &Manager, id: &str| {
+        m.list()
+            .into_iter()
+            .find(|v| v.config.id == id)
+            .unwrap()
+            .config
+    };
+    let mut cfg = by_id(&m, "work-2");
     cfg.folder = "/srv/z/renamed".into();
     m.update(cfg).unwrap();
-    assert_eq!(m.list()[1].config.id, "work-2");
+    assert_eq!(by_id(&m, "work-2").folder, Path::new("/srv/z/renamed"));
     assert!(dir.join("instances/work-2.json").exists());
 }
 
