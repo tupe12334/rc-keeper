@@ -187,11 +187,13 @@ pub struct SetSettingsParams {
     pub claude_bin: Option<PathBuf>,
 }
 
-/// Result of `ping`.
+/// Result of `ping`. `configDir` is the canonical config dir the daemon serves.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct PingResult {
     pub version: String,
     pub pid: u32,
+    pub config_dir: String,
 }
 
 /// Result of `get_settings`. `autostart` is always `null`: the GUI owns login autostart.

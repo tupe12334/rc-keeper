@@ -3016,6 +3016,7 @@ dependencies = [
  "anyhow",
  "dirs 7.0.0",
  "interprocess",
+ "libc",
  "rc-core",
  "schemars 1.2.3",
  "serde",

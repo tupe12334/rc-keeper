@@ -13,4 +13,4 @@ pub use client::{Client, IO_TIMEOUT};
 pub use method::{Method, MethodSpec};
 pub use paths::{config_dir, socket_path};
 pub use protocol::{Request, Response};
-pub use server::{bind, serve, shutdown_and_exit};
+pub use server::{bind, serve, serve_until, shutdown_and_exit};

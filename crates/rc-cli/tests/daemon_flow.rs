@@ -140,7 +140,7 @@ fn daemon_lifecycle_through_cli() {
 
     eprintln!("step: config dir 0700, socket 0600");
     assert_eq!(mode(&root.join("config")), 0o700);
-    assert_eq!(mode(&root.join("config").join("rc-keeper.sock")), 0o600);
+    assert_eq!(mode(Path::new(st["socketPath"].as_str().unwrap())), 0o600);
 
     eprintln!("step: second foreground daemon fails, first stays reachable");
     rk(&root)
