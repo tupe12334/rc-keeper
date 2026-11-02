@@ -1,32 +1,43 @@
 //! Daemon side: accept connections, one thread each, dispatch methods onto the Manager.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
+#[cfg(unix)]
+use std::sync::OnceLock;
 use std::thread;
 
-use interprocess::local_socket::{prelude::*, ListenerOptions, Stream};
+use anyhow::{bail, Context, Result};
+use interprocess::local_socket::{prelude::*, Listener, ListenerOptions, Stream};
 use rc_core::{find_claude_bin, InstanceConfig, Manager, Settings};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 
+use crate::client::Client;
 use crate::paths::{config_dir, socket_name, socket_path};
 use crate::protocol::{Request, Response};
 
-/// Binds the socket and serves forever. The caller must check that no daemon answers ping first.
-pub fn serve(manager: Manager) -> ! {
-    // Stale socket file from a crashed daemon. The caller already checked ping.
-    let _ = std::fs::create_dir_all(config_dir());
-    let _ = std::fs::remove_file(socket_path());
-    let listener = match ListenerOptions::new()
-        .name(socket_name().expect("socket name"))
-        .create_sync()
-    {
-        Ok(listener) => listener,
-        Err(e) => {
-            eprintln!("rc-keeper: cannot bind socket: {e}");
-            std::process::exit(1);
+/// Binds the daemon socket. Fails when a live daemon answers ping.
+///
+/// Never unlinks a socket that answers ping: a daemon that lost the race exits here
+/// and leaves the winner's socket in place.
+pub fn bind() -> Result<Listener> {
+    prepare_config_dir().context("cannot create config dir")?;
+    match try_bind() {
+        Ok(listener) => Ok(listener),
+        Err(e) if e.kind() == io::ErrorKind::AddrInUse => {
+            if Client::connect().and_then(|mut c| c.ping()).is_ok() {
+                bail!("rc-keeper daemon is already running");
+            }
+            // Nothing answers, so the file belongs to a dead daemon.
+            let _ = std::fs::remove_file(socket_path());
+            try_bind().context("cannot bind rc-keeper socket")
         }
-    };
+        Err(e) => Err(e).context("cannot bind rc-keeper socket"),
+    }
+}
+
+/// Serves requests forever on a socket from [`bind`].
+pub fn serve(listener: Listener, manager: Manager) -> ! {
     loop {
         match listener.accept() {
             Ok(stream) => {
@@ -38,11 +49,59 @@ pub fn serve(manager: Manager) -> ! {
     }
 }
 
-/// Kills all children, removes the socket and exits the process.
+/// Kills all children, removes this daemon's socket and exits the process.
 pub fn shutdown_and_exit(manager: &Manager) -> ! {
     manager.shutdown();
-    let _ = std::fs::remove_file(socket_path());
+    remove_own_socket();
     std::process::exit(0)
+}
+
+/// Inode of the socket this process bound. Only that file is removed on exit.
+#[cfg(unix)]
+static OWN_INODE: OnceLock<u64> = OnceLock::new();
+
+fn try_bind() -> io::Result<Listener> {
+    let listener = ListenerOptions::new().name(socket_name()?).create_sync()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let path = socket_path();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+        let _ = OWN_INODE.set(std::fs::metadata(&path)?.ino());
+    }
+    Ok(listener)
+}
+
+#[cfg(unix)]
+fn remove_own_socket() {
+    use std::os::unix::fs::MetadataExt;
+    let Some(ino) = OWN_INODE.get() else { return };
+    let path = socket_path();
+    if std::fs::metadata(&path).is_ok_and(|m| m.ino() == *ino) {
+        let _ = std::fs::remove_file(&path);
+    }
+}
+
+#[cfg(not(unix))]
+fn remove_own_socket() {
+    // Named pipes have no file to remove.
+}
+
+/// Config dir is private to the user (0700). Unix only.
+fn prepare_config_dir() -> io::Result<()> {
+    let dir = config_dir();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&dir)?;
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    #[cfg(not(unix))]
+    std::fs::create_dir_all(&dir)?;
+    Ok(())
 }
 
 fn handle(stream: Stream, manager: &Manager) {

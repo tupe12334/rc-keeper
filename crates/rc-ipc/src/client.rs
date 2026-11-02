@@ -1,6 +1,7 @@
 //! Blocking client: one request, one response line.
 
 use std::io::{BufRead, BufReader, Write};
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use interprocess::local_socket::{prelude::*, Stream};
@@ -8,6 +9,9 @@ use serde_json::Value;
 
 use crate::paths::socket_name;
 use crate::protocol::{Request, Response};
+
+/// Read and write timeout on every call. Windows named pipes have none.
+pub const IO_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct Client {
     reader: BufReader<Stream>,
@@ -17,6 +21,8 @@ pub struct Client {
 impl Client {
     pub fn connect() -> Result<Client> {
         let stream = Stream::connect(socket_name()?).context("cannot reach rc-keeper daemon")?;
+        let _ = stream.set_recv_timeout(Some(IO_TIMEOUT));
+        let _ = stream.set_send_timeout(Some(IO_TIMEOUT));
         Ok(Client {
             reader: BufReader::new(stream),
             next_id: 1,

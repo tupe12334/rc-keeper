@@ -25,8 +25,11 @@ pub fn select(
 ) -> Result<InstanceView> {
     let (by_id, rest): (Vec<_>, Vec<_>) = views.into_iter().partition(|v| v.config.id == selector);
     let mut hits = if by_id.is_empty() {
+        // Compare canonical paths: a stored folder may hold a symlink.
         rest.into_iter()
-            .filter(|v| folder == Some(v.config.folder.as_path()))
+            .filter(|v| {
+                folder.is_some_and(|f| canonical(&v.config.folder).ok().as_deref() == Some(f))
+            })
             .collect()
     } else {
         by_id
@@ -55,6 +58,13 @@ fn strip_verbatim(p: PathBuf) -> PathBuf {
 mod tests {
     use super::*;
     use rc_core::{InstanceConfig, InstanceStatus, State};
+
+    /// A real canonical folder, so folder matching has something to compare.
+    fn existing_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("rck-sel-dir-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::canonicalize(dir).unwrap()
+    }
 
     fn view(id: &str, folder: &str) -> InstanceView {
         InstanceView {
@@ -94,14 +104,26 @@ mod tests {
 
     #[test]
     fn folder_selects_when_no_id_matches() {
-        let views = vec![view("a", "/x"), view("b", "/y")];
-        assert_eq!(
-            select(views, "/y", Some(Path::new("/y")))
-                .unwrap()
-                .config
-                .id,
-            "b"
-        );
+        let dir = existing_dir();
+        let d = dir.to_str().unwrap();
+        let views = vec![view("a", "/nonexistent-x"), view("b", d)];
+        assert_eq!(select(views, d, Some(&dir)).unwrap().config.id, "b");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn folder_matches_when_stored_path_is_a_symlink() {
+        let base = std::env::temp_dir().join(format!("rck-sel-{}", std::process::id()));
+        let real = base.join("real");
+        let link = base.join("link");
+        std::fs::create_dir_all(&real).unwrap();
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let canon = std::fs::canonicalize(&real).unwrap();
+        let views = vec![view("a", link.to_str().unwrap())];
+        let found = select(views, canon.to_str().unwrap(), Some(&canon));
+        let _ = std::fs::remove_dir_all(&base);
+        assert_eq!(found.unwrap().config.id, "a");
     }
 
     #[test]
@@ -112,8 +134,10 @@ mod tests {
 
     #[test]
     fn two_folder_matches_are_ambiguous() {
-        let views = vec![view("a", "/x"), view("b", "/x")];
-        let err = select(views, "/x", Some(Path::new("/x"))).unwrap_err();
+        let dir = existing_dir();
+        let d = dir.to_str().unwrap();
+        let views = vec![view("a", d), view("b", d)];
+        let err = select(views, d, Some(&dir)).unwrap_err();
         assert!(err.to_string().contains("matches 2"));
     }
 

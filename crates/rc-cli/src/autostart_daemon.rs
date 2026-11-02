@@ -35,7 +35,10 @@ pub fn connect_or_start() -> Result<Client> {
     if let Some(client) = live_client() {
         return Ok(client);
     }
-    spawn_daemon()?;
+    if let Err(e) = spawn_daemon() {
+        eprintln!("rc-keeper: cannot start daemon: {e:#}");
+        return Err(DaemonUnreachable.into());
+    }
     for _ in 0..50 {
         thread::sleep(Duration::from_millis(100));
         if let Some(client) = live_client() {
@@ -60,7 +63,15 @@ fn spawn_daemon() -> Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        cmd.process_group(0);
+        // SAFETY: runs between fork and exec and only calls setsid, which is async-signal-safe.
+        unsafe {
+            cmd.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
     }
     #[cfg(windows)]
     {

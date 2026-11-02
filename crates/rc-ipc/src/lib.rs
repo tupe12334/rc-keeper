@@ -7,7 +7,7 @@ mod paths;
 mod protocol;
 mod server;
 
-pub use client::Client;
+pub use client::{Client, IO_TIMEOUT};
 pub use paths::{config_dir, socket_path};
 pub use protocol::{Request, Response};
-pub use server::{serve, shutdown_and_exit};
+pub use server::{bind, serve, shutdown_and_exit};

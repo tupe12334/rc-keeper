@@ -8,12 +8,32 @@ use super::{exe, print_daemon_state, run_cmd, service_dir, write_file};
 
 pub const UNIT_FILE: &str = "rc-keeper.service";
 
+/// `ExecStart` value: quoted, with systemd specifiers (`%`) and variables (`$`) escaped.
+pub fn exec_start(exe: &Path) -> String {
+    let mut out = String::from("\"");
+    for c in exe.display().to_string().chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '%' => out.push_str("%%"),
+            '$' => out.push_str("$$"),
+            c => out.push(c),
+        }
+    }
+    out.push_str("\" daemon");
+    out
+}
+
 pub fn unit_text(exe: &Path) -> String {
+    let path = std::iter::once("%h/.local/bin")
+        .chain(super::PATH_TAIL)
+        .collect::<Vec<_>>()
+        .join(":");
     format!(
         "[Unit]\nDescription=rc-keeper daemon (claude remote-control)\n\n\
-         [Service]\nExecStart={} daemon\nRestart=always\nRestartSec=5\n\n\
+         [Service]\nExecStart={}\nEnvironment=PATH={path}\nRestart=on-failure\nRestartSec=5\n\n\
          [Install]\nWantedBy=default.target\n",
-        exe.display()
+        exec_start(exe)
     )
 }
 
@@ -68,15 +88,35 @@ pub fn status() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::unit_text;
+    use super::{exec_start, unit_text};
     use std::path::Path;
 
     #[test]
-    fn unit_runs_daemon_with_restart_policy() {
+    fn unit_restarts_only_on_failure_so_stop_sticks() {
         let text = unit_text(Path::new("/usr/local/bin/rc-keeper"));
-        assert!(text.contains("ExecStart=/usr/local/bin/rc-keeper daemon\n"));
-        assert!(text.contains("Restart=always\n"));
+        assert!(text.contains("ExecStart=\"/usr/local/bin/rc-keeper\" daemon\n"));
+        assert!(text.contains("Restart=on-failure\n"));
+        assert!(!text.contains("Restart=always"));
         assert!(text.contains("RestartSec=5\n"));
         assert!(text.contains("WantedBy=default.target\n"));
+    }
+
+    #[test]
+    fn unit_sets_path_for_claude() {
+        let text = unit_text(Path::new("/usr/local/bin/rc-keeper"));
+        assert!(text.contains(
+            "Environment=PATH=%h/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin\n"
+        ));
+    }
+
+    #[test]
+    fn exec_start_quotes_and_escapes_specials() {
+        assert_eq!(
+            exec_start(Path::new("/opt/rc keeper")),
+            "\"/opt/rc keeper\" daemon"
+        );
+        assert_eq!(exec_start(Path::new("/a%b")), "\"/a%%b\" daemon");
+        assert_eq!(exec_start(Path::new("/a$b")), "\"/a$$b\" daemon");
+        assert_eq!(exec_start(Path::new("/a\"b\\c")), "\"/a\\\"b\\\\c\" daemon");
     }
 }

@@ -34,6 +34,16 @@ pub fn run_cmd(program: &str, args: &[&str]) -> Result<()> {
     Ok(())
 }
 
+/// PATH for the service. `claude` lives in one of these, or in `~/.local/bin`.
+pub const PATH_TAIL: [&str; 4] = ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", "/bin"];
+
+pub fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
 pub fn write_file(path: &Path, text: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;

@@ -5,20 +5,21 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 
-use super::{exe, print_daemon_state, run_cmd, service_dir, write_file};
+use super::{exe, print_daemon_state, run_cmd, service_dir, write_file, xml_escape};
 use rc_ipc::config_dir;
 
 pub const LABEL: &str = "io.github.tupe12334.rckeeper.daemon";
 
-fn xml(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-pub fn plist_text(exe: &Path, log: &Path) -> String {
-    let exe = xml(&exe.display().to_string());
-    let log = xml(&log.display().to_string());
+/// Restarts only after a failed exit. A clean exit from `daemon stop` stays stopped.
+pub fn plist_text(exe: &Path, log: &Path, home: &Path) -> String {
+    let exe = xml_escape(&exe.display().to_string());
+    let log = xml_escape(&log.display().to_string());
+    let local_bin = format!("{}/.local/bin", home.display());
+    let path = std::iter::once(local_bin.as_str())
+        .chain(super::PATH_TAIL)
+        .collect::<Vec<_>>()
+        .join(":");
+    let path = xml_escape(&path);
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -31,10 +32,18 @@ pub fn plist_text(exe: &Path, log: &Path) -> String {
     <string>{exe}</string>
     <string>daemon</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>{path}</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
-  <true/>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
   <key>StandardOutPath</key>
   <string>{log}</string>
   <key>StandardErrorPath</key>
@@ -63,9 +72,10 @@ fn uid() -> Result<String> {
 
 pub fn install(dry_run: bool) -> Result<()> {
     let path = plist_path()?;
+    let home = dirs::home_dir().context("no home directory")?;
     write_file(
         &path,
-        &plist_text(&exe()?, &config_dir().join("daemon.log")),
+        &plist_text(&exe()?, &config_dir().join("daemon.log"), &home),
     )?;
     println!("wrote {}", path.display());
     if dry_run {
@@ -113,18 +123,37 @@ mod tests {
     use super::{plist_text, LABEL};
     use std::path::Path;
 
-    #[test]
-    fn plist_runs_daemon_at_load_and_keeps_alive() {
-        let text = plist_text(
+    fn text() -> String {
+        plist_text(
             Path::new("/Applications/rc & keeper"),
             Path::new("/tmp/daemon.log"),
-        );
-        assert!(text.contains(&format!("<string>{LABEL}</string>")));
-        assert!(text.contains(
+            Path::new("/Users/me"),
+        )
+    }
+
+    #[test]
+    fn plist_runs_daemon_at_load() {
+        let t = text();
+        assert!(t.contains(&format!("<string>{LABEL}</string>")));
+        assert!(t.contains(
             "<string>/Applications/rc &amp; keeper</string>\n    <string>daemon</string>"
         ));
-        assert!(text.contains("<key>RunAtLoad</key>\n  <true/>"));
-        assert!(text.contains("<key>KeepAlive</key>\n  <true/>"));
-        assert!(text.contains("<string>/tmp/daemon.log</string>"));
+        assert!(t.contains("<key>RunAtLoad</key>\n  <true/>"));
+        assert!(t.contains("<string>/tmp/daemon.log</string>"));
+    }
+
+    #[test]
+    fn keepalive_restarts_only_on_failure_so_stop_sticks() {
+        let t = text();
+        assert!(t.contains("<key>KeepAlive</key>\n  <dict>\n    <key>SuccessfulExit</key>\n    <false/>\n  </dict>"));
+        assert!(!t.contains("<key>KeepAlive</key>\n  <true/>"));
+    }
+
+    #[test]
+    fn plist_sets_path_with_absolute_home_bin() {
+        let t = text();
+        assert!(t.contains(
+            "<key>PATH</key>\n    <string>/Users/me/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>"
+        ));
     }
 }

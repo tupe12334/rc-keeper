@@ -21,7 +21,8 @@ pub fn run(selector: &str, follow: bool) -> Result<()> {
     }
     loop {
         thread::sleep(Duration::from_secs(1));
-        let now = get_logs(&mut client, &id)?;
+        // A fresh connection per poll, so one timed-out call does not end the stream.
+        let now = get_logs(&mut connect()?, &id)?;
         for line in new_lines(&seen, &now) {
             println!("{line}");
         }

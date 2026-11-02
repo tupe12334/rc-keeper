@@ -139,7 +139,7 @@ pub enum ServiceCmd {
 }
 
 #[derive(Args)]
-#[command(group(ArgGroup::new("target").required(true).args(["selector", "all"])))]
+#[command(group(ArgGroup::new("target").required(true).multiple(false).args(["selector", "all"])))]
 pub struct Target {
     /// Instance id or folder path
     pub selector: Option<String>,
@@ -238,7 +238,15 @@ impl InstanceFlags {
 
 /// Runs the CLI. Returns the process exit code.
 pub fn run() -> i32 {
-    let cli = Cli::parse();
+    // Usage errors exit 1. Exit 2 means "daemon unreachable", so clap's default 2 is not used.
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(e) => {
+            let code = if e.use_stderr() { 1 } else { 0 };
+            let _ = e.print();
+            return code;
+        }
+    };
     match dispatch(cli.command) {
         Ok(()) => 0,
         Err(e) => match e.downcast_ref::<Exit>() {
@@ -284,5 +292,24 @@ fn dispatch(command: Command) -> Result<()> {
             println!("rc-keeper {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Cli;
+    use clap::Parser;
+
+    #[test]
+    fn target_selector_and_all_are_exclusive() {
+        assert!(Cli::try_parse_from(["rc-keeper", "start", "foo", "--all"]).is_err());
+        assert!(Cli::try_parse_from(["rc-keeper", "start", "--all"]).is_ok());
+        assert!(Cli::try_parse_from(["rc-keeper", "start"]).is_err());
+    }
+
+    #[test]
+    fn help_is_not_a_usage_error() {
+        let err = Cli::try_parse_from(["rc-keeper", "--help"]).err().unwrap();
+        assert!(!err.use_stderr());
     }
 }

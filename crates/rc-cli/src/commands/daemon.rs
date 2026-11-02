@@ -13,14 +13,26 @@ use crate::cli::Exit;
 use crate::output::print_json;
 
 pub fn run() -> Result<()> {
-    if live_client().is_some() {
-        bail!("another rc-keeper daemon is already running");
-    }
+    // Bind before loading: a second daemon must fail without starting auto-start children.
+    let listener = rc_ipc::bind()?;
     let manager = Manager::load(config_dir());
     let for_signal = manager.clone();
     ctrlc::set_handler(move || shutdown_and_exit(&for_signal))?;
-    rc_ipc::serve(manager)
+    ignore_hangup();
+    rc_ipc::serve(listener, manager)
 }
+
+/// Runs after the ctrlc handler, which also catches SIGHUP. The daemon must survive hangup.
+#[cfg(unix)]
+fn ignore_hangup() {
+    // SAFETY: SIG_IGN is async-signal-safe and touches no memory.
+    unsafe {
+        libc::signal(libc::SIGHUP, libc::SIG_IGN);
+    }
+}
+
+#[cfg(not(unix))]
+fn ignore_hangup() {}
 
 /// Exit 0 when the daemon stopped or was not running.
 pub fn stop() -> Result<()> {
