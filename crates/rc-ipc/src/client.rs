@@ -1,13 +1,13 @@
 //! Blocking client: one request, one response line.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use interprocess::local_socket::{prelude::*, Stream};
 use serde_json::Value;
 
-use crate::paths::socket_name;
+use crate::paths::socket_names;
 use crate::protocol::{Request, Response};
 
 /// Read and write timeout on every call. Windows named pipes have none.
@@ -19,14 +19,24 @@ pub struct Client {
 }
 
 impl Client {
+    /// Tries the current socket, then the legacy one.
     pub fn connect() -> Result<Client> {
-        let stream = Stream::connect(socket_name()?).context("cannot reach rc-keeper daemon")?;
-        let _ = stream.set_recv_timeout(Some(IO_TIMEOUT));
-        let _ = stream.set_send_timeout(Some(IO_TIMEOUT));
-        Ok(Client {
-            reader: BufReader::new(stream),
-            next_id: 1,
-        })
+        let mut last = None;
+        for name in socket_names()? {
+            match Stream::connect(name) {
+                Ok(stream) => {
+                    let _ = stream.set_recv_timeout(Some(IO_TIMEOUT));
+                    let _ = stream.set_send_timeout(Some(IO_TIMEOUT));
+                    return Ok(Client {
+                        reader: BufReader::new(stream),
+                        next_id: 1,
+                    });
+                }
+                Err(e) => last = Some(e),
+            }
+        }
+        Err(last.unwrap_or_else(|| io::Error::other("no socket name")))
+            .context("cannot reach rc-keeper daemon")
     }
 
     pub fn call(&mut self, method: &str, params: Value) -> Result<Value> {

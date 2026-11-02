@@ -17,16 +17,19 @@ use crate::paths::{config_dir, socket_name, socket_path};
 use crate::protocol::{Request, Response};
 use crate::schema::{CfgParams, GetSettingsResult, IdParams, PingResult, SetSettingsParams};
 
-/// Binds the daemon socket. Fails when a live daemon answers ping.
+/// Binds the daemon socket. Fails when a live daemon answers ping, on the new or the legacy socket.
 ///
 /// Never unlinks a socket that answers ping: a daemon that lost the race exits here
 /// and leaves the winner's socket in place.
 pub fn bind() -> Result<Listener> {
     prepare_config_dir().context("cannot create config dir")?;
+    if daemon_answers() {
+        bail!("rc-keeper daemon is already running");
+    }
     match try_bind() {
         Ok(listener) => Ok(listener),
         Err(e) if e.kind() == io::ErrorKind::AddrInUse => {
-            if Client::connect().and_then(|mut c| c.ping()).is_ok() {
+            if daemon_answers() {
                 bail!("rc-keeper daemon is already running");
             }
             // Nothing answers, so the file belongs to a dead daemon.
@@ -35,6 +38,10 @@ pub fn bind() -> Result<Listener> {
         }
         Err(e) => Err(e).context("cannot bind rc-keeper socket"),
     }
+}
+
+fn daemon_answers() -> bool {
+    Client::connect().and_then(|mut c| c.ping()).is_ok()
 }
 
 /// Serves requests forever on a socket from [`bind`].
