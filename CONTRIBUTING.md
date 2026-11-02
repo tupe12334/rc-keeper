@@ -39,6 +39,10 @@ CI runs the checks in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on 
 
 Tests must use a temporary config folder. Never test against your real home folder or your real rc-keeper config.
 
+### Headless Linux check
+
+Run [`scripts/headless-linux-check.sh`](scripts/headless-linux-check.sh) when you change the CLI, the daemon or the service code. It needs Docker. The script builds the CLI in a container, then runs it in a clean `ubuntu:24.04` with no GUI and no systemd, as a non-root user, with a fake `claude`. This is how rc-keeper runs on a server over SSH. The script checks the full flow: add, status, stop and start, service install, remove and daemon stop. It prints `FAIL: <reason>` and exits 1 on the first problem.
+
 ## API docs
 
 The CLI and IPC reference in [`docs/reference`](docs/reference) is generated from the code. So is `ui/src/api/generated.ts`, the UI's IPC types. Do not edit these files by hand.
