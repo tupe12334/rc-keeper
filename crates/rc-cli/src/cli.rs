@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use clap::builder::PossibleValuesParser;
 use clap::{ArgGroup, Args, Parser, Subcommand};
 use rc_core::InstanceConfig;
 
@@ -146,6 +147,16 @@ pub struct Target {
     pub all: bool,
 }
 
+const PERMISSION_MODES: [&str; 6] = [
+    "acceptEdits",
+    "auto",
+    "bypassPermissions",
+    "default",
+    "dontAsk",
+    "plan",
+];
+const SPAWN_MODES: [&str; 3] = ["same-dir", "worktree", "session"];
+
 /// Instance options. Unset options keep their value on `edit`.
 #[derive(Args, Default)]
 pub struct InstanceFlags {
@@ -155,9 +166,9 @@ pub struct InstanceFlags {
     pub chrome: bool,
     #[arg(long)]
     pub no_chrome: bool,
-    #[arg(long)]
+    #[arg(long, value_parser = PossibleValuesParser::new(PERMISSION_MODES))]
     pub permission_mode: Option<String>,
-    #[arg(long)]
+    #[arg(long, value_parser = PossibleValuesParser::new(SPAWN_MODES))]
     pub spawn: Option<String>,
     #[arg(long)]
     pub capacity: Option<u32>,
