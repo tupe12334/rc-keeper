@@ -1,6 +1,13 @@
 //! Process-tree queries via sysinfo: session counts and killing leftover children.
+use crate::foreign::Victim;
 use std::collections::VecDeque;
+use std::time::Duration;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+
+#[cfg(unix)]
+const EXIT_POLL: Duration = Duration::from_millis(100);
+#[cfg(unix)]
+use std::{thread, time::Instant};
 
 /// Argument that marks a remote-control session child.
 const SESSION_FLAG: &str = "--sdk-url";
@@ -69,4 +76,82 @@ fn descendants(sys: &System, root: u32) -> Vec<Pid> {
         }
     }
     found
+}
+
+/// Stops the victims. Each one is checked with `still_same` right before its signal, so a pid
+/// reused by another process is never signalled. Unix: SIGTERM, wait up to `grace`, then SIGKILL
+/// for any still alive. Windows: terminates each matching process at once.
+#[cfg(unix)]
+pub fn terminate(victims: &[Victim], grace: Duration, still_same: impl Fn(&Victim) -> bool) {
+    for victim in victims {
+        if still_same(victim) {
+            signal(victim.pid, libc::SIGTERM);
+        }
+    }
+    let until = Instant::now() + grace;
+    while Instant::now() < until && victims.iter().any(|v| alive(v.pid)) {
+        thread::sleep(EXIT_POLL);
+    }
+    for victim in victims.iter().filter(|v| alive(v.pid)) {
+        if still_same(victim) {
+            signal(victim.pid, libc::SIGKILL);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+pub fn terminate(victims: &[Victim], _grace: Duration, still_same: impl Fn(&Victim) -> bool) {
+    let Ok(mut sys) = System::new() else {
+        return;
+    };
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+    for victim in victims {
+        if !still_same(victim) {
+            continue;
+        }
+        if let Some(process) = sys.process(Pid::from_u32(victim.pid)) {
+            process.kill();
+        }
+    }
+}
+
+/// The pid as a positive `pid_t`. Zero and values above `i32::MAX` never reach kill(2): zero
+/// means "our own group" and negative values mean a process group.
+#[cfg(unix)]
+fn pid_of(pid: u32) -> Option<libc::pid_t> {
+    libc::pid_t::try_from(pid).ok().filter(|&p| p > 0)
+}
+
+#[cfg(unix)]
+fn signal(pid: u32, sig: libc::c_int) {
+    let Some(pid) = pid_of(pid) else {
+        return;
+    };
+    // SAFETY: kill(2) on one positive pid. The caller re-verified the process identity just before.
+    unsafe {
+        libc::kill(pid, sig);
+    }
+}
+
+/// `kill(pid, 0)`: true while the process exists, including zombies not yet reaped.
+#[cfg(unix)]
+fn alive(pid: u32) -> bool {
+    let Some(pid) = pid_of(pid) else {
+        return false;
+    };
+    // SAFETY: signal 0 only checks that the pid exists.
+    unsafe { libc::kill(pid, 0) == 0 }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::pid_of;
+
+    #[test]
+    fn zero_and_out_of_range_pids_never_reach_kill() {
+        assert_eq!(pid_of(0), None);
+        assert_eq!(pid_of(u32::MAX), None);
+        assert_eq!(pid_of(i32::MAX as u32 + 1), None);
+        assert_eq!(pid_of(42), Some(42));
+    }
 }

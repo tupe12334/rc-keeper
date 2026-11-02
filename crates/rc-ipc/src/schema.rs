@@ -30,6 +30,8 @@ pub struct InstanceConfig {
     pub extra_args: Vec<String>,
     pub auto_trust: bool,
     pub auto_start: bool,
+    /// Stop the other claude rc in the folder when this instance is folder-busy, then retry.
+    pub force_boot: bool,
 }
 
 /// Daemon settings. Shared by all instances.
@@ -95,6 +97,7 @@ fn check_instance_config(v: rc_core::InstanceConfig) -> InstanceConfig {
         extra_args,
         auto_trust,
         auto_start,
+        force_boot,
     } = v;
     InstanceConfig {
         id,
@@ -109,6 +112,7 @@ fn check_instance_config(v: rc_core::InstanceConfig) -> InstanceConfig {
         extra_args,
         auto_trust,
         auto_start,
+        force_boot,
     }
 }
 
@@ -166,7 +170,27 @@ fn check_instance_view(v: rc_core::InstanceView) -> InstanceView {
     }
 }
 
-/// Params of `get_logs`, `remove_instance`, `start_instance`, `stop_instance`, `restart_instance`.
+/// Result of `force_start` and `preview_force_start`. `stopped` lists the pids that were stopped
+/// (or, for a preview, that would be stopped).
+#[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TakeoverResult {
+    pub stopped: Vec<u32>,
+    /// What may start a stopped process again, e.g. `launchd (ppid 1)`. Null when nothing was found.
+    pub respawn_risk: Option<String>,
+}
+
+impl From<rc_core::Takeover> for TakeoverResult {
+    fn from(t: rc_core::Takeover) -> Self {
+        TakeoverResult {
+            stopped: t.stopped,
+            respawn_risk: t.respawn_risk,
+        }
+    }
+}
+
+/// Params of `get_logs`, `remove_instance`, `start_instance`, `stop_instance`, `restart_instance`,
+/// `force_start` and `preview_force_start`.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IdParams {

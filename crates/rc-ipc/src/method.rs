@@ -4,7 +4,9 @@ use std::path::PathBuf;
 
 use schemars::{Schema, SchemaGenerator};
 
-use crate::schema::{CfgParams, GetSettingsResult, IdParams, PingResult, SetSettingsParams};
+use crate::schema::{
+    CfgParams, GetSettingsResult, IdParams, PingResult, SetSettingsParams, TakeoverResult,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Method {
@@ -23,9 +25,11 @@ pub enum Method {
     GetSettings,
     SetSettings,
     DetectClaudeBin,
+    ForceStart,
+    PreviewForceStart,
 }
 
-pub const ALL: [Method; 15] = [
+pub const ALL: [Method; 17] = [
     Method::Ping,
     Method::Shutdown,
     Method::ListInstances,
@@ -41,6 +45,8 @@ pub const ALL: [Method; 15] = [
     Method::GetSettings,
     Method::SetSettings,
     Method::DetectClaudeBin,
+    Method::ForceStart,
+    Method::PreviewForceStart,
 ];
 
 impl Method {
@@ -62,6 +68,8 @@ impl Method {
             Method::GetSettings => "get_settings",
             Method::SetSettings => "set_settings",
             Method::DetectClaudeBin => "detect_claude_bin",
+            Method::ForceStart => "force_start",
+            Method::PreviewForceStart => "preview_force_start",
         }
     }
 
@@ -113,6 +121,10 @@ fn spec(method: Method, g: &mut SchemaGenerator) -> MethodSpec {
             g.subschema_for::<()>(),
         ),
         DetectClaudeBin => (None, g.subschema_for::<Option<PathBuf>>()),
+        ForceStart | PreviewForceStart => (
+            Some(g.subschema_for::<IdParams>()),
+            g.subschema_for::<TakeoverResult>(),
+        ),
     };
     MethodSpec {
         method,

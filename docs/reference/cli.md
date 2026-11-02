@@ -152,6 +152,8 @@ Add a folder as a new instance
 * `--no-auto-trust` — Do not answer the folder trust prompt. You must trust the folder yourself. Not passed to `claude`
 * `--auto-start` — Start this instance now and each time the daemon starts. On by default for `add`. Not passed to `claude`
 * `--no-auto-start` — Do not start this instance with the daemon. Start it with `rc-keeper start`. Not passed to `claude`
+* `--force-boot` — When another `claude remote-control` serves the folder, stop it and start this instance. Kills without asking. Not passed to `claude`
+* `--no-force-boot` — Back off when the folder is busy instead of taking it over. Off by default. Not passed to `claude`
 
 
 
@@ -187,6 +189,8 @@ Change an instance. Only given flags change
 * `--no-auto-trust` — Do not answer the folder trust prompt. You must trust the folder yourself. Not passed to `claude`
 * `--auto-start` — Start this instance now and each time the daemon starts. On by default for `add`. Not passed to `claude`
 * `--no-auto-start` — Do not start this instance with the daemon. Start it with `rc-keeper start`. Not passed to `claude`
+* `--force-boot` — When another `claude remote-control` serves the folder, stop it and start this instance. Kills without asking. Not passed to `claude`
+* `--no-force-boot` — Back off when the folder is busy instead of taking it over. Off by default. Not passed to `claude`
 
 
 
@@ -206,7 +210,7 @@ Remove an instance (stops it first)
 
 Start an instance, or all with --all
 
-**Usage:** `rc-keeper start <SELECTOR|--all>`
+**Usage:** `rc-keeper start [OPTIONS] <SELECTOR|--all>`
 
 ###### **Arguments:**
 
@@ -215,6 +219,8 @@ Start an instance, or all with --all
 ###### **Options:**
 
 * `--all` — Apply to every instance. Give either this or a selector, not both
+* `--force` — Kills the other claude remote-control in the folder (SIGTERM, then SIGKILL after 5 s), then starts. Destructive. Not with --all
+* `--yes` — Skip the confirmation prompt for --force. Required when no terminal is attached
 
 
 

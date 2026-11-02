@@ -14,6 +14,8 @@ pub struct InstanceConfig {
     pub chrome: bool,
     pub create_session_in_dir: Option<bool>,
     pub extra_args: Vec<String>,
+    /// On folder-busy, stop the other `claude remote-control` in the folder and retry.
+    pub force_boot: bool,
     pub permission_mode: Option<String>,
     pub session_name_prefix: Option<String>,
     pub spawn: Option<String>,

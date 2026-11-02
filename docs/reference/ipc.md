@@ -29,6 +29,8 @@ Errors are plain strings. Unknown methods return `unknown method: <name>`. Bad p
 | `get_settings` | none | [GetSettingsResult](#getsettingsresult) | `error` string |
 | `set_settings` | [SetSettingsParams](#setsettingsparams) | null | `error` string |
 | `detect_claude_bin` | none | string \| null | `error` string |
+| `force_start` | [IdParams](#idparams) | [TakeoverResult](#takeoverresult) | `error` string |
+| `preview_force_start` | [IdParams](#idparams) | [TakeoverResult](#takeoverresult) | `error` string |
 
 Tauri GUI commands mirror these names with camelCase args. The GUI exposes `ping` as `daemon_info` and `shutdown` as `stop_daemon`.
 
@@ -53,7 +55,7 @@ Result of `get_settings`. `autostart` is always `null`: the GUI owns login autos
 
 ### IdParams
 
-Params of `get_logs`, `remove_instance`, `start_instance`, `stop_instance`, `restart_instance`.
+Params of `get_logs`, `remove_instance`, `start_instance`, `stop_instance`, `restart_instance`, `force_start` and `preview_force_start`.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -72,6 +74,7 @@ One folder that runs `claude remote-control`.
 | `createSessionInDir` | boolean \| null | yes |  |
 | `extraArgs` | string[] | yes | Extra arguments for `claude remote-control`. |
 | `folder` | string | yes | Folder that `claude remote-control` runs in. |
+| `forceBoot` | boolean | yes | Stop the other claude rc in the folder when this instance is folder-busy, then retry. |
 | `id` | string | yes | Stable id. Empty on `add_instance`: the daemon generates one. |
 | `name` | string \| null | yes |  |
 | `permissionMode` | string \| null | yes | One of `acceptEdits`, `auto`, `bypassPermissions`, `default`, `dontAsk`, `plan`. |
@@ -128,4 +131,13 @@ Daemon settings. Shared by all instances.
 ### State
 
 Type: `stopped` \| `starting` \| `running` \| `restarting` \| `folder-busy` \| `needs-trust` \| `error`
+
+### TakeoverResult
+
+Result of `force_start` and `preview_force_start`. `stopped` lists the pids that were stopped (or, for a preview, that would be stopped).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `respawnRisk` | string \| null | yes | What may start a stopped process again, e.g. `launchd (ppid 1)`. Null when nothing was found. |
+| `stopped` | integer[] | yes |  |
 

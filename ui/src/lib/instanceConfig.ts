@@ -16,6 +16,7 @@ export interface InstanceForm {
   extraArgs: string;
   autoTrust: boolean;
   autoStart: boolean;
+  forceBoot: boolean;
 }
 
 export function emptyForm(): InstanceForm {
@@ -31,6 +32,7 @@ export function emptyForm(): InstanceForm {
     extraArgs: "",
     autoTrust: true,
     autoStart: true,
+    forceBoot: false,
   };
 }
 
@@ -64,6 +66,7 @@ export function formToConfig(form: InstanceForm, id: string): InstanceConfig {
     extraArgs: parseExtraArgs(form.extraArgs),
     autoTrust: form.autoTrust,
     autoStart: form.autoStart,
+    forceBoot: form.forceBoot,
   };
 }
 
@@ -80,6 +83,7 @@ export function configToForm(cfg: InstanceConfig): InstanceForm {
     extraArgs: formatExtraArgs(cfg.extraArgs),
     autoTrust: cfg.autoTrust,
     autoStart: cfg.autoStart,
+    forceBoot: cfg.forceBoot,
   };
 }
 

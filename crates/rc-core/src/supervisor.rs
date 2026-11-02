@@ -5,6 +5,7 @@ use crate::backoff::Backoff;
 use crate::model::{InstanceConfig, InstanceStatus, State};
 use crate::parser::{Event, Parser};
 use crate::procs;
+use crate::takeover;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::collections::VecDeque;
 use std::io::{Read, Write};
@@ -18,6 +19,8 @@ const LOG_LINES: usize = 500;
 /// Answers typed before the prompt is ready are ignored, so wait before answering.
 const TRUST_DELAY: Duration = Duration::from_secs(2);
 const POLL: Duration = Duration::from_millis(100);
+/// Pause after a takeover, so the stopped process can exit before the retry.
+const TAKEOVER_SETTLE: Duration = Duration::from_secs(1);
 
 /// Per-instance state shared by the manager and the supervisor thread.
 #[derive(Default)]
@@ -71,6 +74,8 @@ enum Outcome {
 /// Thread body. Returns when stop is requested or when the folder needs trust.
 pub fn run(shared: Arc<Shared>, job: Job) {
     let mut backoff = Backoff::default();
+    let mut budget = takeover::Budget::default();
+    let mut last_risk: Option<String> = None;
     loop {
         let started = Instant::now();
         let outcome = run_once(&shared, &job);
@@ -80,6 +85,32 @@ pub fn run(shared: Arc<Shared>, job: Job) {
             Outcome::NeedsTrust => {
                 shared.live().status.state = State::NeedsTrust;
                 return;
+            }
+            Outcome::Busy if job.cfg.force_boot => {
+                if !budget.allow(Instant::now()) {
+                    let by = last_risk.as_deref().unwrap_or("an unknown parent");
+                    let mut live = shared.live();
+                    live.status.state = State::Error;
+                    live.status.last_error = Some(format!(
+                        "foreign rc keeps coming back (respawned by {by}) — disable it"
+                    ));
+                    return;
+                }
+                let taken = takeover::take_over(&job.cfg.folder);
+                if let Some(risk) = taken.respawn_risk {
+                    eprintln!(
+                        "rc-core: {} may respawn a stopped rc: {risk}",
+                        job.cfg.folder.display()
+                    );
+                    shared.live().status.last_error =
+                        Some(format!("took over folder; respawn risk: {risk}"));
+                    last_risk = Some(risk);
+                }
+                if taken.stopped.is_empty() {
+                    (State::FolderBusy, backoff.next_delay(ran_for))
+                } else {
+                    (State::FolderBusy, TAKEOVER_SETTLE)
+                }
             }
             Outcome::Busy => (State::FolderBusy, backoff.next_delay(ran_for)),
             Outcome::Exited => (State::Restarting, backoff.next_delay(ran_for)),
@@ -249,6 +280,15 @@ struct Session<'a> {
 }
 
 impl Session<'_> {
+    /// Moves Starting to Running, unless a trust answer is still pending.
+    fn mark_running(&self) {
+        let mut live = self.shared.live();
+        let trust_pending = self.question_seen && !self.answered;
+        if live.status.state == State::Starting && !trust_pending {
+            live.status.state = State::Running;
+        }
+    }
+
     fn feed(&mut self, parser: &mut Parser, chunk: &[u8]) -> Option<Outcome> {
         parser
             .feed(chunk)
@@ -274,13 +314,9 @@ impl Session<'_> {
                     return Some(Outcome::NeedsTrust);
                 }
             }
-            Event::Output => {
-                let mut live = self.shared.live();
-                let trust_pending = self.question_seen && !self.answered;
-                if live.status.state == State::Starting && !trust_pending {
-                    live.status.state = State::Running;
-                }
-            }
+            // Output alone does not mean ready. A banner can come before a busy notice.
+            Event::Output => {}
+            Event::Ready => self.mark_running(),
             Event::Line(line) => {
                 let mut live = self.shared.live();
                 if live.log.len() == LOG_LINES {
@@ -293,6 +329,7 @@ impl Session<'_> {
             }
             Event::SessionUrl(url) => {
                 self.ready = true;
+                self.mark_running();
                 let mut live = self.shared.live();
                 if !live.status.session_urls.contains(&url) {
                     live.status.session_urls.push(url);

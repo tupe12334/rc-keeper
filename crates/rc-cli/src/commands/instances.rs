@@ -62,6 +62,7 @@ pub fn add(folder: &Path, flags: &InstanceFlags) -> Result<()> {
         extra_args: vec![],
         auto_trust: true,
         auto_start: true,
+        force_boot: false,
     };
     flags.apply(&mut cfg);
     let mut client = connect()?;

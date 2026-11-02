@@ -15,3 +15,10 @@ which = "8.0.6"
 
 [target."cfg(unix)".dependencies]
 libc = "0.2"
+
+# Stand-in for `claude` in integration tests. Copied to a temp dir as `claude`. Not installed.
+[[bin]]
+name = "fake-claude"
+path = "tests/fixtures/fake_claude.rs"
+test = false
+doc = false
