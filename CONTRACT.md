@@ -47,3 +47,12 @@ The config dir can be a git repo (dotfiles), shared across machines. Rules:
 - **Live reload:** the daemon watches the dir (`notify` crate) and applies external edits (e.g. after `git pull`): added → added, removed → stopped+removed, changed → restarted if running. Invalid file → logged + shown as `error` state, others unaffected.
 - **Migration:** a legacy single `config.json` is split into the new layout once, then renamed `config.json.migrated`.
 - `rc-keeper config path` prints the dir; env `RC_KEEPER_CONFIG_DIR` overrides it (point it at a git repo).
+
+## v4 addendum: force boot (take over a folder)
+Only one `claude remote-control` may serve a folder. "Force boot" stops the other one and starts the folder under rc-keeper.
+- Detect: a process is a *foreign rc* for folder F when its command line runs `claude` with `remote-control` or `rc`, its cwd equals F (canonical), and it is not a child of this daemon. Use `sysinfo` (cmd + cwd) — works on macOS, Linux, Windows.
+- Stop: SIGTERM (Windows: terminate), wait up to 5 s, then SIGKILL; also kill its `--sdk-url` session children. Never kill by name pattern alone; never touch processes outside folder F.
+- Supervisor: if the foreign rc's parent is a supervisor that will respawn it (launchd, systemd, another rc-keeper), report that in the result (`respawnRisk: "<parent command>"`) so the user can disable it.
+- Per-instance option `forceBoot: bool` (default false): on folder-busy, take over automatically instead of backing off.
+- One-shot: IPC method `force_start({id}) -> {stopped: [pid], respawnRisk: string|null}`; Tauri command of the same name; CLI `rc-keeper start <sel> --force` and `rc-keeper add <folder> --force-boot`.
+- UI: a folder-busy card shows a "Take over" button (confirm dialog naming the PIDs it will stop); the form gets a "Force boot" switch with an info popover.
