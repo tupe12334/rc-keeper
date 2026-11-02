@@ -9,6 +9,8 @@ const PROMPT: &str = "[y/N]";
 const TRUST_QUESTION: &str = "Quick safety check";
 const TRUST_WORD: &str = "Trust";
 const SESSION_URL: &str = "https://claude.ai/code";
+/// Printed once the server is ready to take sessions. A banner alone does not mean ready.
+const READY: &str = "Capacity:";
 /// Unfinished-line cap. Keeps memory flat when a program prints without newlines.
 const MAX_PARTIAL: usize = 4096;
 /// Trust text must sit within this many bytes before a `[y/N]` prompt.
@@ -16,8 +18,10 @@ const TRUST_WINDOW: usize = 2048;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
-    /// Some output arrived. Always the last event of a chunk.
+    /// Some output arrived. Always the last event of a chunk. Does not mean ready.
     Output,
+    /// The server reports its capacity, so it is ready for sessions.
+    Ready,
     /// One complete line, ANSI stripped, without its line break.
     Line(String),
     FolderBusy,
@@ -153,6 +157,9 @@ impl Parser {
         {
             events.push(Event::Error(trimmed.to_owned()));
         }
+        if line.contains(READY) {
+            events.push(Event::Ready);
+        }
         if let Some(start) = line.find(SESSION_URL) {
             let url = line[start..]
                 .split_whitespace()
@@ -189,6 +196,14 @@ mod tests {
 
     fn trust_count(events: &[Event]) -> usize {
         events.iter().filter(|e| **e == Event::TrustPrompt).count()
+    }
+
+    #[test]
+    fn capacity_line_is_ready_and_a_banner_is_not() {
+        let banner = Parser::new().feed(b"Remote Control starting\r\n");
+        assert!(!banner.contains(&Event::Ready));
+        let ready = Parser::new().feed(b"Capacity: 32 sessions\r\n");
+        assert!(ready.contains(&Event::Ready));
     }
 
     #[test]

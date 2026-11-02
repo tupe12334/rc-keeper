@@ -280,6 +280,15 @@ struct Session<'a> {
 }
 
 impl Session<'_> {
+    /// Moves Starting to Running, unless a trust answer is still pending.
+    fn mark_running(&self) {
+        let mut live = self.shared.live();
+        let trust_pending = self.question_seen && !self.answered;
+        if live.status.state == State::Starting && !trust_pending {
+            live.status.state = State::Running;
+        }
+    }
+
     fn feed(&mut self, parser: &mut Parser, chunk: &[u8]) -> Option<Outcome> {
         parser
             .feed(chunk)
@@ -305,13 +314,9 @@ impl Session<'_> {
                     return Some(Outcome::NeedsTrust);
                 }
             }
-            Event::Output => {
-                let mut live = self.shared.live();
-                let trust_pending = self.question_seen && !self.answered;
-                if live.status.state == State::Starting && !trust_pending {
-                    live.status.state = State::Running;
-                }
-            }
+            // Output alone does not mean ready. A banner can come before a busy notice.
+            Event::Output => {}
+            Event::Ready => self.mark_running(),
             Event::Line(line) => {
                 let mut live = self.shared.live();
                 if live.log.len() == LOG_LINES {
@@ -324,6 +329,7 @@ impl Session<'_> {
             }
             Event::SessionUrl(url) => {
                 self.ready = true;
+                self.mark_running();
                 let mut live = self.shared.live();
                 if !live.status.session_urls.contains(&url) {
                     live.status.session_urls.push(url);
