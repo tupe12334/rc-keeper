@@ -47,6 +47,10 @@ Remote sessions started from claude.ai or your phone can read, edit and run file
 - "Trust this folder automatically" answers the folder trust prompt for you.
 - Pick folders and modes with care. Prefer project folders over your home folder.
 
+## Related projects
+
+- [moadim](https://moadim.io/) — loop engineering: build, schedule and run agent loops.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
