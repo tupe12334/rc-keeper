@@ -22,11 +22,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/linecheck
-          key: ${{ runner.os }}-linecheck-1.2.2
+          key: ${{ runner.os }}-linecheck-1.2.1
 
       - name: Install linecheck
         if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo install linecheck --version 1.2.2 --locked
+        run: cargo install linecheck --version 1.2.1 --locked
 
       - name: Run linecheck
         run: linecheck .
