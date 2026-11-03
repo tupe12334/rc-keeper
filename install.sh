@@ -28,6 +28,15 @@ info() {
   printf '==> %s\n' "$1"
 }
 
+# Copies $1 to $2 through a rename. Writing over a binary in place gets the new one
+# SIGKILLed on macOS (stale code signature) and fails with "Text file busy" on Linux
+# while the old one runs (the daemon).
+place_bin() {
+  if ! { cp "$1" "$2.new" && chmod +x "$2.new" && mv -f "$2.new" "$2"; }; then
+    die "could not install $2"
+  fi
+}
+
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=1 ;;
@@ -140,8 +149,7 @@ install_cli() {
 
   BIN_DIR="$HOME/.local/bin"
   mkdir -p "$BIN_DIR"
-  cp "$BIN" "$BIN_DIR/rc-keeper"
-  chmod +x "$BIN_DIR/rc-keeper"
+  place_bin "$BIN" "$BIN_DIR/rc-keeper"
   info "Installed $BIN_DIR/rc-keeper"
   case ":$PATH:" in
     *":$BIN_DIR:"*) ;;
@@ -196,8 +204,7 @@ install_linux() {
       BIN_DIR="$HOME/.local/bin"
       APPS_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
       mkdir -p "$BIN_DIR" "$APPS_DIR"
-      cp "$FILE" "$BIN_DIR/rc-keeper-gui"
-      chmod +x "$BIN_DIR/rc-keeper-gui"
+      place_bin "$FILE" "$BIN_DIR/rc-keeper-gui"
       cat > "$APPS_DIR/rc-keeper.desktop" <<EOF
 [Desktop Entry]
 Type=Application
