@@ -15,3 +15,6 @@ rc-cli = { path = "../crates/rc-cli" }
 rc-ipc = { path = "../crates/rc-ipc" }
 schemars = "1"
 serde_json = "1"
+
+[lints]
+workspace = true

@@ -486,7 +486,7 @@ mod tests {
             .remove(0);
         assert!(same_process(&before, &victim));
 
-        let mut reused = before.clone();
+        let mut reused = before;
         reused[0].start = 2;
         assert!(!same_process(&reused, &victim));
     }
@@ -507,7 +507,7 @@ mod tests {
         other_cmd[0].cmd = cmd(&["claude", "--print"]);
         assert!(!same_process(&other_cmd, &victim));
 
-        let mut other_cwd = before.clone();
+        let mut other_cwd = before;
         other_cwd[0].cwd = Some(PathBuf::from("/work/other"));
         assert!(!same_process(&other_cwd, &victim));
         assert!(!same_process(&[], &victim));
