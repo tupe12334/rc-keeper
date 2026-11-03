@@ -188,6 +188,8 @@ fn run_once(shared: &Shared, job: &Job) -> Outcome {
         live.status.state = State::Starting;
         live.status.pid = pid;
         live.status.next_retry_secs = None;
+        // URLs of the last child are dead now.
+        live.status.session_urls.clear();
         live.started_at = Some(Instant::now());
     }
 
@@ -199,6 +201,7 @@ fn run_once(shared: &Shared, job: &Job) -> Outcome {
         answered: false,
         question_seen: false,
         ready: false,
+        errored: false,
     };
     let outcome = loop {
         if shared.stop.load(Ordering::SeqCst) {
@@ -220,7 +223,7 @@ fn run_once(shared: &Shared, job: &Job) -> Outcome {
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => thread::sleep(POLL),
         }
-        if let Ok(Some(_)) = child.try_wait() {
+        if let Ok(Some(status)) = child.try_wait() {
             // Keep the output printed just before the exit, e.g. a busy notice.
             let mut late = None;
             while let Ok(chunk) = rx.recv_timeout(Duration::from_millis(200)) {
@@ -228,6 +231,13 @@ fn run_once(shared: &Shared, job: &Job) -> Outcome {
                     late = Some(outcome);
                     break;
                 }
+            }
+            if late.is_none() && !session.errored {
+                // No error line, so the exit code is the only reason the user gets.
+                shared.live().status.last_error = Some(format!(
+                    "claude exited with code {} and printed no error; see the logs",
+                    status.exit_code()
+                ));
             }
             break late.unwrap_or(Outcome::Exited);
         }
@@ -277,12 +287,17 @@ struct Session<'a> {
     question_seen: bool,
     /// True once a session URL appeared. Later trust prompts are ignored.
     ready: bool,
+    /// True while `last_error` holds an error from this child.
+    errored: bool,
 }
 
 impl Session<'_> {
     /// Moves Starting to Running, unless a trust answer is still pending.
-    fn mark_running(&self) {
+    /// The server is connected again, so an older error no longer applies.
+    fn mark_running(&mut self) {
         let mut live = self.shared.live();
+        live.status.last_error = None;
+        self.errored = false;
         let trust_pending = self.question_seen && !self.answered;
         if live.status.state == State::Starting && !trust_pending {
             live.status.state = State::Running;
@@ -325,6 +340,7 @@ impl Session<'_> {
                 live.log.push_back(line);
             }
             Event::Error(message) => {
+                self.errored = true;
                 self.shared.live().status.last_error = Some(message);
             }
             Event::SessionUrl(url) => {

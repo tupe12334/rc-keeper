@@ -151,10 +151,12 @@ impl Parser {
             events.push(Event::TrustPrompt);
         }
         let trimmed = line.trim();
-        if trimmed.starts_with("Error:")
-            || line.contains("ECONNRESET")
-            || line.contains("ENOTFOUND")
-        {
+        let network = network_problem(line);
+        if let Some(problem) = network {
+            events.push(Event::Error(format!(
+                "{problem}. Check the internet connection; rc-keeper retries by itself. ({trimmed})"
+            )));
+        } else if trimmed.starts_with("Error:") {
             events.push(Event::Error(trimmed.to_owned()));
         }
         if line.contains(READY) {
@@ -176,6 +178,22 @@ impl Parser {
     fn is_trust_prompt(&self, line: &str) -> bool {
         line.contains(TRUST_WORD) || self.window.contains(TRUST_QUESTION)
     }
+}
+
+/// Node.js network error codes that claude prints when the network is down, in plain words.
+fn network_problem(line: &str) -> Option<&'static str> {
+    const CODES: [(&str, &str); 6] = [
+        ("ENOTFOUND", "No network: DNS lookup failed"),
+        ("EAI_AGAIN", "No network: DNS lookup failed"),
+        ("ENETUNREACH", "No network: network unreachable"),
+        ("ECONNREFUSED", "Network error: connection refused"),
+        ("ECONNRESET", "Network error: connection dropped"),
+        ("ETIMEDOUT", "Network error: connection timed out"),
+    ];
+    CODES
+        .iter()
+        .find(|(code, _)| line.contains(code))
+        .map(|(_, problem)| *problem)
 }
 
 /// Drops the oldest bytes so that at most `max` remain, cutting on a char boundary.
@@ -268,10 +286,24 @@ mod tests {
 
     #[test]
     fn error_line_is_reported() {
+        let events = Parser::new().feed(b"Error: bad flag --foo\n");
+        assert!(events.contains(&Event::Error("Error: bad flag --foo".into())));
+    }
+
+    #[test]
+    fn network_error_is_explained_and_keeps_the_raw_line() {
         let events = Parser::new().feed(b"Error: getaddrinfo ENOTFOUND api.example\n");
-        assert!(events.contains(&Event::Error(
-            "Error: getaddrinfo ENOTFOUND api.example".into()
-        )));
+        let errors: Vec<_> = events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Error(m) => Some(m.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(errors[0].starts_with("No network: DNS lookup failed."));
+        assert!(errors[0].contains("retries by itself"));
+        assert!(errors[0].ends_with("(Error: getaddrinfo ENOTFOUND api.example)"));
     }
 
     #[test]
