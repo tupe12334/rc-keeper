@@ -1,6 +1,6 @@
 [package]
 name = "rc-keeper-gui"
-version = "0.1.1"
+version = "0.2.0"
 description = "Desktop UI and tray for rc-keeper"
 edition = "2021"
 publish = false
