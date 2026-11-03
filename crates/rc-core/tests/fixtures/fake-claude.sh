@@ -3,6 +3,9 @@
 # Modes (extra args):
 #   --fake-busy    print the folder-busy notice and exit.
 #   --fake-orphan  start a background `sleep 600`, print the pid to orphan.pid, and exit.
+#   --fake-offline   print a DNS error and exit 1, like claude with no network.
+#   --fake-reconnect print a DNS error, then connect and print the session URL.
+#   --fake-silent-exit  exit 3 with no output.
 #   (default)      ask the trust question, read one answer, print the session URL,
 #                  then ask an unrelated late [y/N] and wait for input.
 # Files are written to the working folder: prompt.time and answer.time (epoch seconds),
@@ -18,6 +21,20 @@ case " $* " in
     echo $! > orphan.pid
     echo "Remote Control ready https://claude.ai/code/session_orphan"
     exit 0
+    ;;
+  *" --fake-offline "*)
+    echo "Error: getaddrinfo ENOTFOUND api.anthropic.com"
+    exit 1
+    ;;
+  *" --fake-reconnect "*)
+    echo "Error: getaddrinfo ENOTFOUND api.anthropic.com"
+    sleep 1
+    echo "Capacity: 1/32"
+    echo "Remote Control ready https://claude.ai/code/session_123"
+    exec sleep 600
+    ;;
+  *" --fake-silent-exit "*)
+    exit 3
     ;;
 esac
 echo "Quick safety check: is this a project you created or one you trust?"

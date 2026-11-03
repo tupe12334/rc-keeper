@@ -234,3 +234,57 @@ fn untrusted_folder_needs_trust_and_does_not_restart() {
     assert_eq!((s.state, s.pid, s.restarts), (State::NeedsTrust, None, 0));
     manager.shutdown();
 }
+
+fn last_error(manager: &Manager, id: &str) -> Option<String> {
+    status(manager, id).last_error
+}
+
+#[test]
+fn offline_error_is_explained_while_retrying() {
+    let (manager, folder) = setup("offline");
+    let id = manager
+        .add(instance(&folder, true, &["--fake-offline"]))
+        .unwrap();
+    manager.start(&id).unwrap();
+
+    let explained = wait_for(Duration::from_secs(10), || {
+        last_error(&manager, &id).is_some_and(|e| e.starts_with("No network: DNS lookup failed"))
+    });
+    assert!(explained, "error: {:?}", status(&manager, &id));
+    manager.shutdown();
+}
+
+#[test]
+fn error_clears_once_connected_again() {
+    let (manager, folder) = setup("reconnect");
+    let id = manager
+        .add(instance(&folder, true, &["--fake-reconnect"]))
+        .unwrap();
+    manager.start(&id).unwrap();
+
+    let saw_error = wait_for(Duration::from_secs(10), || {
+        last_error(&manager, &id).is_some()
+    });
+    assert!(saw_error, "never saw the DNS error");
+    let cleared = wait_for(Duration::from_secs(10), || {
+        let s = status(&manager, &id);
+        s.state == State::Running && s.last_error.is_none()
+    });
+    assert!(cleared, "stale error stayed: {:?}", status(&manager, &id));
+    manager.shutdown();
+}
+
+#[test]
+fn silent_exit_reports_the_exit_code() {
+    let (manager, folder) = setup("silent_exit");
+    let id = manager
+        .add(instance(&folder, true, &["--fake-silent-exit"]))
+        .unwrap();
+    manager.start(&id).unwrap();
+
+    let reported = wait_for(Duration::from_secs(10), || {
+        last_error(&manager, &id).is_some_and(|e| e.contains("exited with code 3"))
+    });
+    assert!(reported, "error: {:?}", status(&manager, &id));
+    manager.shutdown();
+}
