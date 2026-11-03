@@ -714,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "rc-cli"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -732,7 +732,7 @@ dependencies = [
 
 [[package]]
 name = "rc-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "libc",
  "notify",
@@ -746,7 +746,7 @@ dependencies = [
 
 [[package]]
 name = "rc-ipc"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "dirs",
