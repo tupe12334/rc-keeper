@@ -5,6 +5,8 @@ export type { InstanceConfig, InstanceStatus, InstanceView, State, TakeoverResul
 export interface UiSettings {
   claudeBin: string | null;
   autostart: boolean;
+  /** macOS only: hide the Dock icon, keep the menu bar icon. */
+  hideDock: boolean;
 }
 
 /** Result of the GUI command `daemon_info`. Not an IPC type. */

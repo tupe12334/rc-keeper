@@ -47,6 +47,18 @@ describe("info buttons", () => {
     expect(infoButton("settings.claudeBin")).toBeInTheDocument();
     expect(infoButton("settings.autostart")).toBeInTheDocument();
   });
+
+  it("settings dialog shows the Hide Dock icon switch only on macOS", () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)");
+    const { unmount } = render(<SettingsDialog onClose={() => {}} />);
+    expect(infoButton("settings.hideDock")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Hide Dock icon" })).toBeInTheDocument();
+    unmount();
+
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (X11; Linux x86_64)");
+    render(<SettingsDialog onClose={() => {}} />);
+    expect(screen.queryByRole("switch", { name: "Hide Dock icon" })).not.toBeInTheDocument();
+  });
 });
 
 describe("popover", () => {

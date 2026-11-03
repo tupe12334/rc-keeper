@@ -27,6 +27,7 @@ New crates (one owner each):
   Any client command auto-starts the daemon (detached) if ping fails. Human output = aligned table; `--json` = machine output. Exit codes: 0 ok, 1 error, 2 daemon unreachable.
 - GUI (`src-tauri`) binary name **`rc-keeper-gui`**; bundles `rc-keeper` as a Tauri sidecar (`externalBin`), on launch connects via `rc_ipc::Client`, spawning the sidecar `rc-keeper daemon` if ping fails. Tauri commands proxy to the IPC client; the `instances` event polls `list_instances` every 1 s. Quitting the GUI does NOT stop the daemon (tray menu offers "Stop daemon"). `--status` moves to the CLI (`rc-keeper status --json`).
 - Releases ship: GUI bundles per OS **and** standalone CLI archives `rc-keeper-<target>.tar.gz` / `.zip` (x86_64 + aarch64 Linux, universal macOS, x86_64 Windows). `install.sh --cli` (auto when no `$DISPLAY`/`$WAYLAND_DISPLAY` on Linux) installs only the CLI to `~/.local/bin`.
+- GUI-owned settings: login autostart (OS launcher) and, on macOS, **Hide Dock icon** (only the menu bar icon stays). The Dock choice lives in `gui.json` in the app config dir; the daemon and the CLI never read it.
 - GUI-only Tauri commands map onto IPC `ping` and `shutdown`. See the [IPC reference](docs/reference/ipc.md).
 - Allowed values: see the field descriptions in the [IPC reference](docs/reference/ipc.md) (from `claude remote-control --help`, v2.1.316).
 - Daemon subcommands and exit codes: see the [CLI reference](docs/reference/cli.md).

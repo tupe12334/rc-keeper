@@ -24,6 +24,8 @@ fn main() {
             // Connects lazily on the first command, so startup never waits on the daemon.
             app.manage(daemon::Daemon::new());
             tray::build(app.handle())?;
+            // ponytail: a failed Dock change only leaves the icon visible; startup goes on.
+            let _ = settings::apply_saved(app.handle());
             events::spawn(app.handle().clone());
             Ok(())
         })

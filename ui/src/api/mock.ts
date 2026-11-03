@@ -8,7 +8,7 @@ type Listener = (views: InstanceView[]) => void;
 const views = new Map<string, InstanceView>();
 const logs = new Map<string, string[]>();
 const listeners = new Set<Listener>();
-let settings: UiSettings = { claudeBin: null, autostart: false };
+let settings: UiSettings = { claudeBin: null, autostart: false, hideDock: false };
 let timer: ReturnType<typeof setInterval> | undefined;
 let nextId = 1;
 
