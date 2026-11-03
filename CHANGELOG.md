@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/tupe12334/rc-keeper/compare/v0.1.1...v0.2.0) (2026-11-03)
+
+
+### Features
+
+* **gui:** setting to hide the Dock icon on macOS ([#33](https://github.com/tupe12334/rc-keeper/issues/33)) ([42b22f4](https://github.com/tupe12334/rc-keeper/commit/42b22f4f7bc81d63cc1e305550bf5ad267e465ae))
+
+
+### Bug Fixes
+
+* **ci:** regenerate docs on the release PR ([#30](https://github.com/tupe12334/rc-keeper/issues/30)) ([7de5d24](https://github.com/tupe12334/rc-keeper/commit/7de5d24827085f0e4798e9f948fad14879fda456))
+
 ## [0.1.1](https://github.com/tupe12334/rc-keeper/compare/v0.1.0...v0.1.1) (2026-11-02)
 
 
