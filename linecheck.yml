@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/tupe12334/linecheck/main/schema/linecheck.schema.json
+#
+# Per-file line limits, enforced in CI by .github/workflows/linecheck.yml.
+# Warn follows the linecheck --default preset (200). Error starts at 600 so
+# today's largest files (foreign.rs 539, manager.rs 486) pass; ratchet error
+# down to 400 once those are split.
+
+rules:
+  - pattern: "**/*.rs"
+    warn: 200
+    warn_message: "Getting long - consider splitting by responsibility"
+    error: 600
+    error_message: "Too large to review easily - split this file before merging"
+  - pattern: "**/*.{ts,tsx}"
+    warn: 200
+    warn_message: "Consider extracting components or hooks"
+    error: 600
+    error_message: "Too large to review easily - split this file before merging"
+  - pattern: "**/*.{sh,ps1}"
+    warn: 200
+    error: 600
+
+exclude:
+  - "target/**"
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/Cargo.lock"
+  - "**/pnpm-lock.yaml"
+  - "CHANGELOG.md"
+  - "docs/reference/**"
+  - "src-tauri/gen/**"
+  - "**/*.md"
+  - "**/*.json"

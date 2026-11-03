@@ -1,0 +1,32 @@
+name: linecheck
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Per-file line limits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache linecheck binary
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/linecheck
+          key: ${{ runner.os }}-linecheck-1.2.2
+
+      - name: Install linecheck
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo install linecheck --version 1.2.2 --locked
+
+      - name: Run linecheck
+        run: linecheck .
