@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/tupe12334/rc-keeper/compare/v0.2.1...v0.2.2) (2026-11-03)
+
+
+### Bug Fixes
+
+* **install:** replace binaries through a rename ([#36](https://github.com/tupe12334/rc-keeper/issues/36)) ([d41855f](https://github.com/tupe12334/rc-keeper/commit/d41855ffe415ad33f4248431bad9e039c5ecaa92))
+
 ## [0.2.1](https://github.com/tupe12334/rc-keeper/compare/v0.2.0...v0.2.1) (2026-11-03)
 
 
