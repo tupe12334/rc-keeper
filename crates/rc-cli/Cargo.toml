@@ -36,3 +36,6 @@ name = "fake-claude-cli"
 path = "../rc-core/tests/fixtures/fake_claude.rs"
 test = false
 doc = false
+
+[lints]
+workspace = true

@@ -22,3 +22,6 @@ name = "fake-claude"
 path = "tests/fixtures/fake_claude.rs"
 test = false
 doc = false
+
+[lints]
+workspace = true
