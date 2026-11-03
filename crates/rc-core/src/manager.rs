@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex, MutexGuard, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::thread;
 use std::time::Duration;
 
@@ -320,7 +320,10 @@ impl Manager {
     }
 
     fn reg(&self) -> MutexGuard<'_, Registry> {
-        self.inner.reg.lock().unwrap_or_else(|e| e.into_inner())
+        self.inner
+            .reg
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
     fn home(&self) -> Option<&Path> {

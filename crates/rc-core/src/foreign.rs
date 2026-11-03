@@ -81,7 +81,7 @@ pub fn snapshot() -> Vec<ProcInfo> {
         .iter()
         .map(|(pid, p)| ProcInfo {
             pid: pid.as_u32(),
-            parent: p.parent().map(|parent| parent.as_u32()),
+            parent: p.parent().map(sysinfo::Pid::as_u32),
             start: p.start_time(),
             cmd: p
                 .cmd()
@@ -264,13 +264,13 @@ mod tests {
             pid,
             parent,
             start: 1,
-            cmd: cmd.iter().map(|s| s.to_string()).collect(),
+            cmd: cmd.iter().map(ToString::to_string).collect(),
             cwd: cwd.map(PathBuf::from),
         }
     }
 
     fn cmd(args: &[&str]) -> Vec<String> {
-        args.iter().map(|s| s.to_string()).collect()
+        args.iter().map(ToString::to_string).collect()
     }
 
     const DAEMON: u32 = 100;
