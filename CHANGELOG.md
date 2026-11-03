@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/tupe12334/rc-keeper/compare/v0.2.0...v0.2.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **core:** clear stale errors and explain network failures ([#34](https://github.com/tupe12334/rc-keeper/issues/34)) ([3a04368](https://github.com/tupe12334/rc-keeper/commit/3a0436883cb94aade78fd9c5694ceb18644d16ef))
+
 ## [0.2.0](https://github.com/tupe12334/rc-keeper/compare/v0.1.1...v0.2.0) (2026-11-03)
 
 
