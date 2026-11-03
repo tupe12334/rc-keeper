@@ -82,6 +82,7 @@ pub async fn set_settings(
     daemon: State<'_, Daemon>,
     claude_bin: Option<PathBuf>,
     autostart: bool,
+    hide_dock: bool,
 ) -> Result<(), String> {
     settings::set(
         &app,
@@ -89,6 +90,7 @@ pub async fn set_settings(
         SettingsDto {
             claude_bin,
             autostart,
+            hide_dock,
         },
     )
 }

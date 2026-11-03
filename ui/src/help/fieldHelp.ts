@@ -40,7 +40,8 @@ export type FieldKey =
   | "autoStart"
   | "forceBoot"
   | "settings.claudeBin"
-  | "settings.autostart";
+  | "settings.autostart"
+  | "settings.hideDock";
 
 export const FIELD_HELP: Record<FieldKey, FieldHelp> = {
   folder: {
@@ -134,6 +135,11 @@ export const FIELD_HELP: Record<FieldKey, FieldHelp> = {
   "settings.autostart": {
     title: "Launch at login",
     text: "Opens rc-keeper when you sign in to your computer.",
+    docUrl: RC_KEEPER_CONTRACT,
+  },
+  "settings.hideDock": {
+    title: "Hide Dock icon",
+    text: "macOS only. Removes rc-keeper from the Dock, so only the menu bar icon stays. Open the window from the menu bar icon.",
     docUrl: RC_KEEPER_CONTRACT,
   },
 };

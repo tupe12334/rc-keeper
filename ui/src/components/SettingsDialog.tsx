@@ -7,8 +7,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 
+// The Dock exists only on macOS.
+const isMac = () => navigator.userAgent.includes("Mac");
+
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const [settings, setSettings] = useState<UiSettings>({ claudeBin: null, autostart: false });
+  const [settings, setSettings] = useState<UiSettings>({ claudeBin: null, autostart: false, hideDock: false });
   const [bin, setBin] = useState("");
   const [daemon, setDaemon] = useState<DaemonInfo | null>(null);
 
@@ -44,7 +47,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   async function save() {
     try {
-      await api.setSettings({ claudeBin: bin.trim() === "" ? null : bin.trim(), autostart: settings.autostart });
+      await api.setSettings({ claudeBin: bin.trim() === "" ? null : bin.trim(), autostart: settings.autostart, hideDock: settings.hideDock });
       toast.success("Settings saved");
       onClose();
     } catch (e) {
@@ -95,6 +98,18 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             </div>
             <Switch id="s-autostart" checked={settings.autostart} onCheckedChange={(v) => setSettings((s) => ({ ...s, autostart: v }))} />
           </div>
+
+          {isMac() && (
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="s-hide-dock" className="text-sm font-medium">
+                  Hide Dock icon
+                </label>
+                <FieldHelp field="settings.hideDock" />
+              </div>
+              <Switch id="s-hide-dock" checked={settings.hideDock} onCheckedChange={(v) => setSettings((s) => ({ ...s, hideDock: v }))} />
+            </div>
+          )}
 
           <section aria-labelledby="s-daemon" className="grid gap-2 border-t border-border pt-4">
             <h3 id="s-daemon" className="text-sm font-medium">
