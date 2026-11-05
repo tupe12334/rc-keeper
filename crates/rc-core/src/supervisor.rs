@@ -3,6 +3,7 @@
 use crate::args::build_args;
 use crate::backoff::Backoff;
 use crate::model::{InstanceConfig, InstanceStatus, State};
+use crate::network_wait::{self, SystemResolver};
 use crate::parser::{Event, Parser};
 use crate::procs;
 use crate::takeover;
@@ -79,6 +80,10 @@ pub fn run(shared: Arc<Shared>, job: Job) {
     loop {
         let started = Instant::now();
         let outcome = run_once(&shared, &job);
+        let exit_error = match outcome {
+            Outcome::Exited => shared.live().status.last_error.clone(),
+            _ => None,
+        };
         let ran_for = started.elapsed();
         let (state, delay) = match outcome {
             Outcome::Stopped => return,
@@ -116,6 +121,14 @@ pub fn run(shared: Arc<Shared>, job: Job) {
             Outcome::Exited => (State::Restarting, backoff.next_delay(ran_for)),
         };
         if !wait_before_restart(&shared, state, delay) {
+            return;
+        }
+        if !network_wait::wait_after_exit(
+            exit_error.as_deref(),
+            &shared.stop,
+            Arc::new(SystemResolver),
+            network_wait::CHECK_EVERY,
+        ) {
             return;
         }
     }

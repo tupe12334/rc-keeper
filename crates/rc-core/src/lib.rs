@@ -6,6 +6,7 @@ mod foreign;
 mod locate;
 mod manager;
 mod model;
+mod network_wait;
 mod parser;
 mod procs;
 mod supervisor;
