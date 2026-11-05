@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/tupe12334/rc-keeper/compare/v0.2.2...v0.3.0) (2026-11-05)
+
+
+### Features
+
+* **core:** reattach to the last session on restart ([#47](https://github.com/tupe12334/rc-keeper/issues/47)) ([12a06cc](https://github.com/tupe12334/rc-keeper/commit/12a06cc1b73570a8bdc68aab0ffbe99921580030))
+
+
+### Bug Fixes
+
+* **core:** run the newest claude when several are installed ([#45](https://github.com/tupe12334/rc-keeper/issues/45)) ([1b70126](https://github.com/tupe12334/rc-keeper/commit/1b70126a6aef7cf96987c7fb65a744aa660b2468))
+
 ## [0.2.2](https://github.com/tupe12334/rc-keeper/compare/v0.2.1...v0.2.2) (2026-11-03)
 
 
