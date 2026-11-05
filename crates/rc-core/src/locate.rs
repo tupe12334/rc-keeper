@@ -1,7 +1,9 @@
 //! Finds the `claude` executable: settings path, then the newest `claude` on PATH or in the default install dir.
 use crate::model::Settings;
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 pub fn find_claude_bin(settings: &Settings) -> Option<PathBuf> {
     if let Some(path) = settings.claude_bin.as_ref().filter(|p| p.exists()) {
@@ -41,10 +43,27 @@ fn newest(mut candidates: Vec<PathBuf>) -> Option<PathBuf> {
     candidates.into_iter().rev().max_by_key(|p| version(p))
 }
 
-// shortcut: no timeout on `--version`, a hung binary blocks the start; add one if that shows up.
+/// A binary that hangs on `--version` ranks lowest after 5 s instead of blocking the start.
 fn version(bin: &Path) -> Option<Vec<u64>> {
-    let out = Command::new(bin).arg("--version").output().ok()?;
-    parse_version(&String::from_utf8_lossy(&out.stdout))
+    let mut child = Command::new(bin)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while child.try_wait().ok()?.is_none() {
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let mut out = String::new();
+    child.stdout.take()?.read_to_string(&mut out).ok()?;
+    parse_version(&out)
 }
 
 /// `2.1.306 (Claude Code)` gives `[2, 1, 306]`.
@@ -86,6 +105,9 @@ mod tests {
         assert_eq!(newest(vec![old.clone(), new.clone(), broken]), Some(new));
         let same = fake("same", "2.1.220 (Claude Code)");
         assert_eq!(newest(vec![old.clone(), same]), Some(old.clone()));
+        // Would claim 9.9.9, but only after the 5 s deadline.
+        let hung = fake("hung", "x'; sleep 30; echo '9.9.9");
+        assert_eq!(newest(vec![hung, old.clone()]), Some(old.clone()));
         assert_eq!(newest(vec![old.clone(), old.clone()]), Some(old));
         assert_eq!(newest(vec![]), None);
         std::fs::remove_dir_all(&dir).unwrap();
