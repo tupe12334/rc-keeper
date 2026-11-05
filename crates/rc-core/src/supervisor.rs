@@ -1,6 +1,6 @@
 //! One supervisor thread per instance. It runs the claude child in a PTY, feeds its output to
 //! the parser, and restarts it with backoff until stop is requested.
-use crate::args::{build_args, can_continue};
+use crate::args::build_args;
 use crate::backoff::Backoff;
 use crate::model::{InstanceConfig, InstanceStatus, State};
 use crate::parser::{Event, Parser};
@@ -76,21 +76,10 @@ pub fn run(shared: Arc<Shared>, job: Job) {
     let mut backoff = Backoff::default();
     let mut budget = takeover::Budget::default();
     let mut last_risk: Option<String> = None;
-    // Reattach to the last session of the folder, so a restart does not lose it.
-    let mut resume = can_continue(&job.cfg);
     loop {
         let started = Instant::now();
-        let (outcome, ready) = run_once(&shared, &job, resume);
+        let outcome = run_once(&shared, &job);
         let ran_for = started.elapsed();
-        if resume && !ready && matches!(outcome, Outcome::Exited) {
-            if shared.stop.load(Ordering::SeqCst) {
-                return;
-            }
-            // Nothing to reattach to (rc keeps it about 4 hours). Start a new session now.
-            resume = false;
-            continue;
-        }
-        resume = can_continue(&job.cfg);
         let (state, delay) = match outcome {
             Outcome::Stopped => return,
             Outcome::NeedsTrust => {
@@ -151,8 +140,7 @@ fn wait_before_restart(shared: &Shared, state: State, delay: Duration) -> bool {
     !shared.stop.load(Ordering::SeqCst)
 }
 
-/// Runs one child. Also returns true when the child printed a session URL.
-fn run_once(shared: &Shared, job: &Job, resume: bool) -> (Outcome, bool) {
+fn run_once(shared: &Shared, job: &Job) -> Outcome {
     let pty = match native_pty_system().openpty(PtySize {
         rows: 40,
         cols: 120,
@@ -160,17 +148,14 @@ fn run_once(shared: &Shared, job: &Job, resume: bool) -> (Outcome, bool) {
         pixel_height: 0,
     }) {
         Ok(pty) => pty,
-        Err(e) => return (fail(shared, format!("openpty: {e}")), false),
+        Err(e) => return fail(shared, format!("openpty: {e}")),
     };
     let mut cmd = CommandBuilder::new(&job.bin);
     cmd.args(build_args(&job.cfg));
-    if resume {
-        cmd.arg("--continue");
-    }
     cmd.cwd(&job.cfg.folder);
     let mut child = match pty.slave.spawn_command(cmd) {
         Ok(child) => child,
-        Err(e) => return (fail(shared, format!("spawn: {e}")), false),
+        Err(e) => return fail(shared, format!("spawn: {e}")),
     };
     drop(pty.slave);
     let pid = child.process_id();
@@ -178,14 +163,14 @@ fn run_once(shared: &Shared, job: &Job, resume: bool) -> (Outcome, bool) {
         Ok(reader) => reader,
         Err(e) => {
             let _ = child.kill();
-            return (fail(shared, format!("pty reader: {e}")), false);
+            return fail(shared, format!("pty reader: {e}"));
         }
     };
     let mut writer = match pty.master.take_writer() {
         Ok(writer) => writer,
         Err(e) => {
             let _ = child.kill();
-            return (fail(shared, format!("pty writer: {e}")), false);
+            return fail(shared, format!("pty writer: {e}"));
         }
     };
 
@@ -282,7 +267,7 @@ fn run_once(shared: &Shared, job: &Job, resume: bool) -> (Outcome, bool) {
         live.status.sessions = 0;
         live.started_at = None;
     }
-    (outcome, session.ready)
+    outcome
 }
 
 fn fail(shared: &Shared, message: String) -> Outcome {
