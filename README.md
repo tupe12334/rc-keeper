@@ -27,6 +27,7 @@ irm https://raw.githubusercontent.com/tupe12334/rc-keeper/main/install.ps1 | iex
 ## Features
 
 - Runs many folders at once. Each folder has its own flags and restarts with backoff.
+- Keeps the session across restarts: each start passes `--continue` and starts a new session only when there is none to reattach to.
 - Desktop app with a tray icon, status, logs, and launch at login.
 - Command-line tool for servers over SSH: `rc-keeper status --json`.
 
