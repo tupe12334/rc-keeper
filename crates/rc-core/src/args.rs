@@ -38,6 +38,17 @@ pub fn build_args(cfg: &InstanceConfig) -> Vec<String> {
     args
 }
 
+/// True when a start may add `--continue` to reattach to the last session of the folder.
+/// Not when the user set the session in `extra_args`, and not in single-session spawn mode,
+/// where the session ending is the reason for the exit.
+pub fn can_continue(cfg: &InstanceConfig) -> bool {
+    let set_by_user = cfg
+        .extra_args
+        .iter()
+        .any(|a| a == "-c" || a == "--continue" || a.starts_with("--session-id"));
+    !set_by_user && cfg.spawn.as_deref() != Some("session")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,5 +100,22 @@ mod tests {
             ..Default::default()
         };
         assert!(build_args(&cfg).contains(&"--create-session-in-dir".to_owned()));
+    }
+
+    #[test]
+    fn continue_is_skipped_when_user_picks_the_session() {
+        assert!(can_continue(&InstanceConfig::default()));
+        for extra in ["-c", "--continue", "--session-id=abc", "--session-id"] {
+            let cfg = InstanceConfig {
+                extra_args: vec![extra.into()],
+                ..Default::default()
+            };
+            assert!(!can_continue(&cfg), "{extra}");
+        }
+        let single = InstanceConfig {
+            spawn: Some("session".into()),
+            ..Default::default()
+        };
+        assert!(!can_continue(&single));
     }
 }

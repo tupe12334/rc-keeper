@@ -6,10 +6,12 @@
 #   --fake-offline   print a DNS error and exit 1, like claude with no network.
 #   --fake-reconnect print a DNS error, then connect and print the session URL.
 #   --fake-silent-exit  exit 3 with no output.
+#   --fake-no-recent  with --continue, print the no-recent-session error and exit 1.
 #   (default)      ask the trust question, read one answer, print the session URL,
 #                  then ask an unrelated late [y/N] and wait for input.
 # Files are written to the working folder: prompt.time and answer.time (epoch seconds),
-# answers.log (one line per answer received).
+# answers.log (one line per answer received), argv.log (one line of arguments per run).
+echo "$*" >> argv.log
 now() { perl -MTime::HiRes=time -e 'printf "%.3f\n", time'; }
 case " $* " in
   *" --fake-busy "*)
@@ -35,6 +37,10 @@ case " $* " in
     ;;
   *" --fake-silent-exit "*)
     exit 3
+    ;;
+  *" --fake-no-recent "*"--continue "*)
+    echo "Error: No recent session found in this directory or its worktrees."
+    exit 1
     ;;
 esac
 echo "Quick safety check: is this a project you created or one you trust?"
