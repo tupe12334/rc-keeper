@@ -284,10 +284,10 @@ impl Manager {
         Ok(takeover::preview(&self.folder_of(id)?))
     }
 
-    /// Last 500 log lines, ANSI stripped. Empty for an unknown id.
+    /// Last 500 log lines, ANSI stripped, repeated blocks collapsed. Empty for an unknown id.
     pub fn logs(&self, id: &str) -> Vec<String> {
         self.shared(id)
-            .map(|s| s.live().log.iter().cloned().collect())
+            .map(|s| s.live().log.lines())
             .unwrap_or_default()
     }
 

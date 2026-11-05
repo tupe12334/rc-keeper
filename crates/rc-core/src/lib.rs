@@ -4,6 +4,7 @@ mod backoff;
 mod config;
 mod foreign;
 mod locate;
+mod log_buffer;
 mod manager;
 mod model;
 mod parser;
