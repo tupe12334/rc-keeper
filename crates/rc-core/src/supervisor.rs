@@ -83,6 +83,9 @@ pub fn run(shared: Arc<Shared>, job: Job) {
         let (outcome, ready) = run_once(&shared, &job, resume);
         let ran_for = started.elapsed();
         if resume && !ready && matches!(outcome, Outcome::Exited) {
+            if shared.stop.load(Ordering::SeqCst) {
+                return;
+            }
             // Nothing to reattach to (rc keeps it about 4 hours). Start a new session now.
             resume = false;
             continue;
