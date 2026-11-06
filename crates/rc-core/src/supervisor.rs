@@ -2,13 +2,13 @@
 //! the parser, and restarts it with backoff until stop is requested.
 use crate::args::build_args;
 use crate::backoff::Backoff;
+use crate::log_buffer::LogBuffer;
 use crate::model::{InstanceConfig, InstanceStatus, State};
 use crate::network_wait::{self, SystemResolver};
 use crate::parser::{Event, Parser};
 use crate::procs;
 use crate::takeover;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,7 +16,6 @@ use std::sync::{Arc, Mutex, MutexGuard, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-const LOG_LINES: usize = 500;
 /// Answers typed before the prompt is ready are ignored, so wait before answering.
 const TRUST_DELAY: Duration = Duration::from_secs(2);
 const POLL: Duration = Duration::from_millis(100);
@@ -36,7 +35,7 @@ pub struct Shared {
 pub struct Live {
     pub status: InstanceStatus,
     pub started_at: Option<Instant>,
-    pub log: VecDeque<String>,
+    pub log: LogBuffer,
     pub thread: Option<JoinHandle<()>>,
 }
 
@@ -345,13 +344,7 @@ impl Session<'_> {
             // Output alone does not mean ready. A banner can come before a busy notice.
             Event::Output => {}
             Event::Ready => self.mark_running(),
-            Event::Line(line) => {
-                let mut live = self.shared.live();
-                if live.log.len() == LOG_LINES {
-                    live.log.pop_front();
-                }
-                live.log.push_back(line);
-            }
+            Event::Line(line) => self.shared.live().log.push(line),
             Event::Error(message) => {
                 self.errored = true;
                 self.shared.live().status.last_error = Some(message);
