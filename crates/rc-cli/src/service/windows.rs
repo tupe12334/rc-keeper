@@ -83,7 +83,7 @@ pub fn create_args(xml: &Path) -> Vec<String> {
         "/F",
     ]
     .iter()
-    .map(|s| s.to_string())
+    .map(ToString::to_string)
     .collect()
 }
 

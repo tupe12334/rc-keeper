@@ -150,7 +150,7 @@ fn sdk_child_of(pidout: &Path) -> u32 {
 /// Instance config. The fake reads `--pidfile` to decide whether the folder is busy.
 fn instance(env: &Env, folder: &Path, force_boot: bool, extra: &[&str]) -> InstanceConfig {
     let mut extra_args = vec![format!("--pidfile={}", env.pidfile.display())];
-    extra_args.extend(extra.iter().map(|s| s.to_string()));
+    extra_args.extend(extra.iter().map(ToString::to_string));
     InstanceConfig {
         folder: folder.to_path_buf(),
         auto_trust: true,
