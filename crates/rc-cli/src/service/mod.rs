@@ -9,6 +9,9 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 
+use rc_core::update_check::update_in_progress;
+use rc_ipc::config_dir;
+
 use crate::autostart_daemon::live_client;
 
 /// `RC_KEEPER_SERVICE_DIR` overrides the default service file directory (tests).
@@ -58,6 +61,20 @@ pub fn print_daemon_state() {
             info["version"].as_str().unwrap_or("unknown")
         ),
         _ => println!("daemon: stopped"),
+    }
+    if let Some(target) = update_in_progress(&config_dir()) {
+        println!("daemon: updating to {target}");
+    }
+}
+
+/// Restarts the login-service daemon so it runs the new binary. False when no service is installed.
+pub fn restart() -> Result<bool> {
+    if cfg!(target_os = "macos") {
+        launchd::restart()
+    } else if cfg!(target_os = "linux") {
+        systemd::restart()
+    } else {
+        Ok(false)
     }
 }
 

@@ -5,6 +5,7 @@ mod daemon;
 mod events;
 mod settings;
 mod tray;
+mod update;
 
 use tauri::{Manager as _, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
@@ -55,6 +56,8 @@ fn main() {
             commands::daemon_info,
             commands::start_daemon,
             commands::stop_daemon,
+            commands::update_info,
+            commands::start_update,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run rc-keeper");

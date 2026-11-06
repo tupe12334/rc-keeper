@@ -5,6 +5,7 @@ use tauri::{AppHandle, State};
 
 use crate::daemon::{self, Daemon};
 use crate::settings::{self, SettingsDto};
+use crate::update;
 
 type CmdResult = Result<Value, String>;
 
@@ -113,4 +114,14 @@ pub async fn start_daemon(daemon: State<'_, Daemon>) -> Result<(), String> {
 #[tauri::command]
 pub async fn stop_daemon(daemon: State<'_, Daemon>) -> Result<(), String> {
     daemon::stop(&daemon)
+}
+
+#[tauri::command]
+pub async fn update_info() -> CmdResult {
+    update::info().await
+}
+
+#[tauri::command]
+pub async fn start_update() -> Result<(), String> {
+    update::start()
 }

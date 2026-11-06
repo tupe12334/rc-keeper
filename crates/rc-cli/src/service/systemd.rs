@@ -93,6 +93,15 @@ pub fn uninstall(dry_run: bool) -> Result<()> {
     Ok(())
 }
 
+/// Restarts the user unit. False when no unit is installed.
+pub fn restart() -> Result<bool> {
+    if !unit_path()?.exists() {
+        return Ok(false);
+    }
+    run_cmd("systemctl", &["--user", "restart", UNIT_FILE])?;
+    Ok(true)
+}
+
 pub fn status() -> Result<()> {
     let path = unit_path()?;
     if path.exists() {

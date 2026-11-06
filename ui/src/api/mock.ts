@@ -1,7 +1,7 @@
 // In-memory stand-in for the Tauri backend. Used when __TAURI_INTERNALS__ is absent
 // (browser dev, tests). Add `?demo` to the URL to start with two sample folders.
 import type { RcApi } from "./index";
-import type { InstanceConfig, InstanceStatus, InstanceView, State, TakeoverResult, UiSettings } from "./types";
+import type { InstanceConfig, InstanceStatus, InstanceView, State, TakeoverResult, UiSettings, UpdateInfo } from "./types";
 
 type Listener = (views: InstanceView[]) => void;
 
@@ -139,6 +139,14 @@ export const mockApi: RcApi = {
   },
   async stopDaemon() {
     log("mock", "daemon stop requested");
+  },
+  async updateInfo(): Promise<UpdateInfo> {
+    // `?update` shows the banner in browser dev.
+    const demo = typeof location !== "undefined" && location.search.includes("update");
+    return { current: "0.3.1", latest: "v0.4.0", updateAvailable: demo, updating: false, updatingTo: null };
+  },
+  async startUpdate() {
+    log("mock", "update requested");
   },
   async detectClaudeBin() {
     return "/usr/local/bin/claude";

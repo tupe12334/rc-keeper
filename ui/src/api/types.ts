@@ -9,6 +9,16 @@ export interface UiSettings {
   hideDock: boolean;
 }
 
+/** Result of the GUI command `update_info`. Not an IPC type. */
+export interface UpdateInfo {
+  current: string;
+  latest: string;
+  updateAvailable: boolean;
+  /** True while an update runs (marker written by `rc-keeper update`). */
+  updating: boolean;
+  updatingTo: string | null;
+}
+
 /** Result of the GUI command `daemon_info`. Not an IPC type. */
 export interface DaemonInfo {
   version: string;

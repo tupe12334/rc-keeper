@@ -28,6 +28,7 @@ This document contains the help content for the `rc-keeper` command-line program
 * [`rc-keeper service install`↴](#rc-keeper-service-install)
 * [`rc-keeper service uninstall`↴](#rc-keeper-service-uninstall)
 * [`rc-keeper service status`↴](#rc-keeper-service-status)
+* [`rc-keeper update`↴](#rc-keeper-update)
 * [`rc-keeper version`↴](#rc-keeper-version)
 
 ## `rc-keeper`
@@ -50,6 +51,7 @@ Keep `claude remote-control` running 24/7
 * `logs` — Print the last log lines of an instance
 * `config` — Get or set settings
 * `service` — Install, remove or inspect the login service
+* `update` — Check for a newer release, or install it and restart the daemon
 * `version` — Print the CLI version
 
 
@@ -358,6 +360,20 @@ Disable the service and remove its file
 Show whether the service is installed and the daemon runs
 
 **Usage:** `rc-keeper service status`
+
+
+
+## `rc-keeper update`
+
+Check for a newer release, or install it and restart the daemon
+
+**Usage:** `rc-keeper update [OPTIONS]`
+
+###### **Options:**
+
+* `--check` — Print the current and latest version. Installs nothing
+* `--json` — Print the check result as JSON. Needs --check
+* `--gui` — Install the desktop app (install.sh --gui) instead of the CLI
 
 
 

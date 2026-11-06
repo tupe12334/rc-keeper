@@ -19,3 +19,4 @@ pub use locate::find_claude_bin;
 pub use manager::Manager;
 pub use model::{AppConfig, InstanceConfig, InstanceStatus, InstanceView, Settings, State};
 pub use takeover::Takeover;
+pub mod update_check;

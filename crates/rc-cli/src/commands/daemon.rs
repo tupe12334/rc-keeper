@@ -4,6 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Result};
+use rc_core::update_check::update_in_progress;
 use rc_core::Manager;
 use rc_ipc::{config_dir, shutdown_and_exit, socket_path};
 use serde_json::{json, Value};
@@ -55,11 +56,20 @@ pub fn stop() -> Result<()> {
 /// Exit 0 when running, 2 when not.
 pub fn status(json: bool) -> Result<()> {
     let socket = socket_path();
+    let updating = update_in_progress(&config_dir());
     let Some(mut client) = live_client() else {
         if json {
-            print_json(&json!({ "running": false, "socketPath": socket }))?;
+            print_json(&json!({
+                "running": false,
+                "socketPath": socket,
+                "updating": updating.is_some(),
+                "updatingTo": updating,
+            }))?;
         } else {
             println!("not running\nsocket {}", socket.display());
+            if let Some(target) = updating {
+                println!("updating to {target}");
+            }
         }
         return Err(Exit(2).into());
     };
@@ -70,6 +80,8 @@ pub fn status(json: bool) -> Result<()> {
             "version": info["version"],
             "pid": info["pid"],
             "socketPath": socket,
+            "updating": updating.is_some(),
+            "updatingTo": updating,
         }))
     } else {
         println!(
@@ -78,6 +90,9 @@ pub fn status(json: bool) -> Result<()> {
             info["pid"],
             socket.display()
         );
+        if let Some(target) = updating {
+            println!("updating to {target}");
+        }
         Ok(())
     }
 }
