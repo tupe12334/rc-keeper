@@ -4,6 +4,6 @@ members = ["crates/*", "xtask"]
 
 [workspace.lints.clippy]
 # Flag `.clone()` calls whose source is never used again: the clone is a
-# wasted allocation and the original can be moved instead. CI runs clippy
-# with `-D warnings`, so `warn` is enforced there.
-redundant_clone = "warn"
+# wasted allocation and the original can be moved instead. `deny` fails
+# local builds too, not only CI.
+redundant_clone = "deny"
