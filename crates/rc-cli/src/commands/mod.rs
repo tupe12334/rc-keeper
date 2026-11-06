@@ -6,6 +6,7 @@ pub mod daemon;
 pub mod instances;
 pub mod logs;
 pub mod selector;
+pub mod update;
 
 use anyhow::Result;
 use rc_core::InstanceView;

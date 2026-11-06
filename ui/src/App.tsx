@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useInstances } from "@/hooks/useInstances";
+import { useUpdate } from "@/hooks/useUpdate";
 import { overallTone } from "@/lib/status";
 
 const dot = { green: "bg-green-500", yellow: "bg-yellow-500", red: "bg-red-500", gray: "bg-zinc-400" } as const;
@@ -22,6 +23,7 @@ export default function App() {
   const { views, loaded, error, refresh } = useInstances();
   const [dialog, setDialog] = useState<Dialog>(null);
   const tone = overallTone(views);
+  const update = useUpdate();
 
   async function bulk(fn: () => Promise<void>, ok: string) {
     try {
@@ -55,6 +57,19 @@ export default function App() {
             </Button>
           </div>
         </header>
+
+        {(update.info?.updateAvailable || update.updating) && (
+          <div role="status" className="flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 text-sm">
+            <span>
+              {update.updating
+                ? `Updating rc-keeper${update.info?.updatingTo ? ` to ${update.info.updatingTo}` : ""}…`
+                : `Update available: ${update.info?.latest} (you have ${update.info?.current})`}
+            </span>
+            <Button size="sm" className="ml-auto" disabled={update.updating} onClick={() => void update.start()}>
+              {update.updating ? "Updating…" : "Update"}
+            </Button>
+          </div>
+        )}
 
         {error && (
           <p role="alert" className="text-sm text-destructive">

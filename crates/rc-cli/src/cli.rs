@@ -110,6 +110,18 @@ pub enum Command {
         #[command(subcommand)]
         action: ServiceCmd,
     },
+    /// Check for a newer release, or install it and restart the daemon
+    Update {
+        /// Print the current and latest version. Installs nothing.
+        #[arg(long)]
+        check: bool,
+        /// Print the check result as JSON. Needs --check.
+        #[arg(long, requires = "check")]
+        json: bool,
+        /// Install the desktop app (install.sh --gui) instead of the CLI.
+        #[arg(long, conflicts_with = "check")]
+        gui: bool,
+    },
     /// Print the CLI version
     Version,
 }
@@ -362,6 +374,7 @@ fn dispatch(command: Command) -> Result<()> {
             ServiceCmd::Uninstall { dry_run } => crate::service::uninstall(dry_run),
             ServiceCmd::Status => crate::service::status(),
         },
+        Command::Update { check, json, gui } => commands::update::run(check, json, gui),
         Command::Version => {
             println!("rc-keeper {}", env!("CARGO_PKG_VERSION"));
             Ok(())

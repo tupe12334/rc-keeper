@@ -107,6 +107,19 @@ pub fn uninstall(dry_run: bool) -> Result<()> {
     Ok(())
 }
 
+/// Restarts the agent with `kickstart -k`. False when no agent is installed.
+pub fn restart() -> Result<bool> {
+    if !plist_path()?.exists() {
+        return Ok(false);
+    }
+    let uid = uid()?;
+    run_cmd(
+        "launchctl",
+        &["kickstart", "-k", &format!("gui/{uid}/{LABEL}")],
+    )?;
+    Ok(true)
+}
+
 pub fn status() -> Result<()> {
     let path = plist_path()?;
     if path.exists() {

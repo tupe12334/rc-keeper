@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -109,9 +110,13 @@ pub fn info() -> Value {
 }
 
 /// Sidecar sits next to the GUI binary: in the bundle, and in target/<profile> after tauri-build copies it.
-fn spawn_sidecar() -> Result<(), String> {
+pub fn sidecar_path() -> Result<PathBuf, String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let sidecar = exe.with_file_name(format!("rc-keeper{}", std::env::consts::EXE_SUFFIX));
+    Ok(exe.with_file_name(format!("rc-keeper{}", std::env::consts::EXE_SUFFIX)))
+}
+
+fn spawn_sidecar() -> Result<(), String> {
+    let sidecar = sidecar_path()?;
     let mut cmd = Command::new(&sidecar);
     cmd.arg("daemon")
         .stdin(Stdio::null())

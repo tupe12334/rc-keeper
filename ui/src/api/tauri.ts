@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { RcApi } from "./index";
-import type { DaemonInfo, InstanceConfig, InstanceView, TakeoverResult, UiSettings } from "./types";
+import type { DaemonInfo, InstanceConfig, InstanceView, TakeoverResult, UiSettings, UpdateInfo } from "./types";
 
 export const tauriApi: RcApi = {
   listInstances: () => invoke<InstanceView[]>("list_instances"),
@@ -21,5 +21,7 @@ export const tauriApi: RcApi = {
   detectClaudeBin: () => invoke<string | null>("detect_claude_bin"),
   daemonInfo: () => invoke<DaemonInfo>("daemon_info"),
   stopDaemon: () => invoke<void>("stop_daemon"),
+  updateInfo: () => invoke<UpdateInfo>("update_info"),
+  startUpdate: () => invoke<void>("start_update"),
   subscribe: (onChange) => listen<InstanceView[]>("instances", (e) => onChange(e.payload)),
 };

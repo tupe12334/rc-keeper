@@ -1,8 +1,8 @@
 import { mockApi } from "./mock";
 import { tauriApi } from "./tauri";
-import type { DaemonInfo, InstanceConfig, InstanceView, TakeoverResult, UiSettings } from "./types";
+import type { DaemonInfo, InstanceConfig, InstanceView, TakeoverResult, UiSettings, UpdateInfo } from "./types";
 
-export type { DaemonInfo, InstanceConfig, InstanceView, InstanceStatus, State, TakeoverResult, UiSettings } from "./types";
+export type { DaemonInfo, InstanceConfig, InstanceView, InstanceStatus, State, TakeoverResult, UiSettings, UpdateInfo } from "./types";
 
 export interface RcApi {
   listInstances(): Promise<InstanceView[]>;
@@ -24,6 +24,10 @@ export interface RcApi {
   detectClaudeBin(): Promise<string | null>;
   daemonInfo(): Promise<DaemonInfo>;
   stopDaemon(): Promise<void>;
+  /** Latest release and whether an update runs. Makes a network call. */
+  updateInfo(): Promise<UpdateInfo>;
+  /** Starts `rc-keeper update --gui` in the background. Returns before the install ends. */
+  startUpdate(): Promise<void>;
   /** Calls `onChange` with every `instances` event. Returns an unsubscribe fn. */
   subscribe(onChange: (views: InstanceView[]) => void): Promise<() => void>;
 }
