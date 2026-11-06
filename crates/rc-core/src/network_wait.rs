@@ -32,33 +32,48 @@ impl Resolver for SystemResolver {
     }
 }
 
-/// One lookup on a helper thread. None when stop arrives first. A lookup that is still
-/// running after `LOOKUP_TIMEOUT` counts as not resolved. The helper thread is left to finish.
-fn lookup(resolver: &Arc<dyn Resolver>, stop: &AtomicBool) -> Option<bool> {
+/// Starts one lookup on a helper thread. The result comes back through the receiver.
+fn spawn_lookup(resolver: &Arc<dyn Resolver>) -> mpsc::Receiver<bool> {
     let (tx, rx) = mpsc::channel();
     let resolver = Arc::clone(resolver);
     thread::spawn(move || {
         let _ = tx.send(resolver.resolves(HOST));
     });
+    rx
+}
+
+enum Awaited {
+    Stop,
+    /// The lookup returned, or its thread died.
+    Done(bool),
+    /// Still running after `LOOKUP_TIMEOUT`. The receiver is kept for the next check.
+    Pending,
+}
+
+/// Waits up to `LOOKUP_TIMEOUT` for a lookup, checking stop every `POLL`.
+fn await_lookup(rx: &mpsc::Receiver<bool>, stop: &AtomicBool) -> Awaited {
     let deadline = Instant::now() + LOOKUP_TIMEOUT;
     loop {
         if stop.load(Ordering::SeqCst) {
-            return None;
+            return Awaited::Stop;
         }
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() {
-            return Some(false);
+            return Awaited::Pending;
         }
         match rx.recv_timeout(POLL.min(left)) {
-            Ok(resolved) => return Some(resolved),
+            Ok(resolved) => return Awaited::Done(resolved),
             Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(mpsc::RecvTimeoutError::Disconnected) => return Some(false),
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Awaited::Done(false),
         }
     }
 }
 
 /// After a network exit, waits until the API host resolves. Returns false when stop arrives
 /// first. Any other exit returns true at once and does not look up the host.
+///
+/// At most one lookup thread exists at a time. A lookup still pending at a check is polled
+/// again at the next check, and no new thread starts until it returns.
 pub fn wait_after_exit(
     last_error: Option<&str>,
     stop: &AtomicBool,
@@ -68,17 +83,21 @@ pub fn wait_after_exit(
     if !last_error.is_some_and(|e| NETWORK_ERRORS.iter().any(|p| e.starts_with(p))) {
         return true;
     }
+    let mut pending: Option<mpsc::Receiver<bool>> = None;
     let mut next_check = Instant::now();
     loop {
         if stop.load(Ordering::SeqCst) {
             return false;
         }
         if Instant::now() >= next_check {
-            match lookup(&resolver, stop) {
-                None => return false,
-                Some(true) => return true,
-                Some(false) => next_check = Instant::now() + check_every,
+            let rx = pending.take().unwrap_or_else(|| spawn_lookup(&resolver));
+            match await_lookup(&rx, stop) {
+                Awaited::Stop => return false,
+                Awaited::Done(true) => return true,
+                Awaited::Done(false) => {}
+                Awaited::Pending => pending = Some(rx),
             }
+            next_check = Instant::now() + check_every;
         }
         thread::sleep(POLL.min(check_every));
     }
@@ -172,6 +191,44 @@ mod tests {
         assert!(!wait_after_exit(NETWORK, &stop, dns, FAST));
         assert!(started.elapsed() < Duration::from_secs(1));
         setter.join().unwrap();
+    }
+
+    /// Blocks every lookup until `gate` opens, and counts the calls.
+    struct GatedDns {
+        gate: Arc<AtomicBool>,
+        calls: AtomicU32,
+    }
+
+    impl Resolver for GatedDns {
+        fn resolves(&self, _host: &str) -> bool {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            while !self.gate.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_millis(10));
+            }
+            false
+        }
+    }
+
+    #[test]
+    fn blocked_lookup_is_not_respawned() {
+        let stop = Arc::new(AtomicBool::new(false));
+        let gate = Arc::new(AtomicBool::new(false));
+        let dns = Arc::new(GatedDns {
+            gate: Arc::clone(&gate),
+            calls: AtomicU32::new(0),
+        });
+        let waiter = {
+            let (stop, dns) = (Arc::clone(&stop), dns.clone());
+            thread::spawn(move || wait_after_exit(NETWORK, &stop, dns, FAST))
+        };
+        // Several checks pass while the first lookup is still blocked.
+        for _ in 0..3 {
+            thread::sleep(Duration::from_millis(1500));
+            assert_eq!(dns.calls.load(Ordering::SeqCst), 1);
+        }
+        gate.store(true, Ordering::SeqCst);
+        stop.store(true, Ordering::SeqCst);
+        assert!(!waiter.join().unwrap());
     }
 
     #[test]
