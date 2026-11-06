@@ -17,10 +17,14 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn run(check: bool, json: bool, gui: bool) -> Result<()> {
     let dir = config_dir();
-    let latest = latest_tag().map_err(anyhow::Error::msg)?;
+    let updating = update_in_progress(&dir);
+    // The GUI polls `--check` while an update runs. The marker names the target, so skip the network.
+    let latest = match (&updating, check) {
+        (Some(target), true) => target.clone(),
+        _ => latest_tag().map_err(anyhow::Error::msg)?,
+    };
     let available = is_newer(&latest, VERSION);
     if check {
-        let updating = update_in_progress(&dir);
         if json {
             return print_json(&json!({
                 "current": VERSION,

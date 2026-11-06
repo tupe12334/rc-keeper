@@ -27,10 +27,29 @@ pub fn latest_tag() -> Result<String, String> {
         .args(["-fsSL", "-H", "Accept: application/vnd.github+json", &url])
         .output()
         .map_err(|e| format!("cannot run curl: {e}"))?;
-    if !out.status.success() {
-        return Err(format!("could not read the latest release from {url}"));
+    if out.status.success() {
+        return parse_latest_tag(&String::from_utf8_lossy(&out.stdout));
     }
-    parse_latest_tag(&String::from_utf8_lossy(&out.stdout))
+    // The API allows 60 calls an hour without a token. The web redirect has no such limit.
+    latest_tag_from_redirect()
+        .ok_or_else(|| format!("could not read the latest release from {url}"))
+}
+
+/// Tag from the `Location` of `github.com/<repo>/releases/latest`.
+fn latest_tag_from_redirect() -> Option<String> {
+    let url = format!("https://github.com/{REPO}/releases/latest");
+    let out = Command::new("curl").args(["-fsSI", &url]).output().ok()?;
+    parse_redirect_tag(&String::from_utf8_lossy(&out.stdout))
+}
+
+/// Reads `v1.2.3` from a `location: .../releases/tag/v1.2.3` header.
+pub fn parse_redirect_tag(headers: &str) -> Option<String> {
+    headers
+        .lines()
+        .find(|l| l.to_ascii_lowercase().starts_with("location:"))?
+        .rsplit_once("/releases/tag/")
+        .map(|(_, tag)| tag.trim().to_string())
+        .filter(|tag| !tag.is_empty())
 }
 
 /// Reads `tag_name` from the JSON of GitHub's "latest release" endpoint.
@@ -91,7 +110,21 @@ pub fn update_in_progress(dir: &Path) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{begin_update, is_newer, parse_latest_tag, parse_version, update_in_progress};
+    use super::{
+        begin_update, is_newer, parse_latest_tag, parse_redirect_tag, parse_version,
+        update_in_progress,
+    };
+
+    #[test]
+    fn reads_tag_from_redirect_headers() {
+        let headers = "HTTP/2 302\r\nLocation: https://github.com/tupe12334/rc-keeper/releases/tag/v0.3.1\r\n\r\n";
+        assert_eq!(parse_redirect_tag(headers).as_deref(), Some("v0.3.1"));
+        assert_eq!(parse_redirect_tag("HTTP/2 404\r\n\r\n"), None);
+        assert_eq!(
+            parse_redirect_tag("location: https://github.com/x/releases/tag/\r\n"),
+            None
+        );
+    }
 
     #[test]
     fn parses_plain_and_v_prefixed_versions() {
