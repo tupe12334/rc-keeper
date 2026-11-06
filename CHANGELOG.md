@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.1](https://github.com/tupe12334/rc-keeper/compare/v0.3.0...v0.3.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **core:** collapse repeated rc redraw lines in log buffer ([#49](https://github.com/tupe12334/rc-keeper/issues/49)) ([f44c24b](https://github.com/tupe12334/rc-keeper/commit/f44c24b2892784a07500aa53983329e6f7b2038d))
+* **core:** stop passing --continue on every start ([#48](https://github.com/tupe12334/rc-keeper/issues/48)) ([f59173c](https://github.com/tupe12334/rc-keeper/commit/f59173c2f410056893a839c72ce1e319f5df3efa))
+* **core:** wait for DNS before respawning after a network exit ([#50](https://github.com/tupe12334/rc-keeper/issues/50)) ([4f8ed43](https://github.com/tupe12334/rc-keeper/commit/4f8ed43dbba310d2b1e175c15a7df8e0aaf2dab8))
+
 ## [0.3.0](https://github.com/tupe12334/rc-keeper/compare/v0.2.2...v0.3.0) (2026-11-05)
 
 
