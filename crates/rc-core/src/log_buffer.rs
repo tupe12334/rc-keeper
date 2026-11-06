@@ -49,9 +49,11 @@ impl LogBuffer {
         }
     }
 
-    /// Shown lines followed by held lines. A held line is not yet known to repeat.
+    /// Last `LOG_LINES` of shown lines followed by held lines. A held line is not yet known to repeat.
     pub fn lines(&self) -> Vec<String> {
-        self.shown.iter().chain(&self.held).cloned().collect()
+        let all: Vec<String> = self.shown.iter().chain(&self.held).cloned().collect();
+        let skip = all.len().saturating_sub(LOG_LINES);
+        all.into_iter().skip(skip).collect()
     }
 
     fn check(&self) -> Check {
@@ -174,5 +176,19 @@ mod tests {
         push_all(&mut buf, &BLOCK);
         push_all(&mut buf, &BLOCK[..2]);
         assert_eq!(buf.lines().len(), 5);
+    }
+
+    #[test]
+    fn lines_cap_holds_with_held_block() {
+        let mut buf = LogBuffer::default();
+        for i in 0..600 {
+            buf.push(format!("line {i}"));
+        }
+        // Start a copy of the last stored lines, so two lines are held when the cap applies.
+        push_all(&mut buf, &["line 597", "line 598"]);
+        let lines = buf.lines();
+        assert!(lines.len() <= 500, "got {}", lines.len());
+        assert_eq!(lines.len(), 500);
+        assert_eq!(lines.last().map(String::as_str), Some("line 598"));
     }
 }
