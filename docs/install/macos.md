@@ -74,6 +74,33 @@ On macOS this installs a launchd agent named `io.github.tupe12334.rckeeper.daemo
 - Config: `~/Library/Application Support/io.github.tupe12334.rckeeper`.
 - Logs: the daemon keeps the last 500 lines for each folder in memory. Read them with `rc-keeper logs <folder>`.
 
+## Sessions lost after sleep (macOS)
+
+Remote Control sessions vanish from claude.ai after the Mac sleeps.
+
+Symptoms:
+
+- `rc-keeper status` shows a high RESTARTS count.
+- lastError reads "No network: DNS lookup failed … (Error: getaddrinfo ENOTFOUND api.anthropic.com)".
+
+Cause: macOS Power Nap wakes the Mac briefly (DarkWake) with no network. rc exits. Each new rc opens a new session. Keep-awake apps such as Amphetamine do not stop DarkWake.
+
+Check Power Nap:
+
+```sh
+pmset -g | grep powernap
+```
+
+A value of `1` means Power Nap is on.
+
+Fix: turn Power Nap off.
+
+```sh
+sudo pmset -a powernap 0
+```
+
+Passing `--continue` is not a fix by default. It puts rc in single-session mode. Use `rc-keeper add DIR -- --continue` only if one session is enough.
+
 ## Related
 
 - [CLI reference](../reference/cli.md)
