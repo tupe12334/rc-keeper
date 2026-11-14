@@ -110,6 +110,29 @@ nohup rc-keeper daemon >/dev/null 2>&1 &
 
 This daemon stops when the host restarts. Start it again after each restart.
 
+## NixOS
+
+Add these options to your NixOS configuration:
+
+```nix
+programs.nix-ld.enable = true;          # runs generic Linux binaries
+programs.appimage = {                   # runs the AppImage
+  enable = true;
+  binfmt = true;
+};
+environment.localBinInPath = true;      # optional: puts ~/.local/bin on PATH
+```
+
+Then apply the change:
+
+```sh
+sudo nixos-rebuild switch
+```
+
+The systemd unit from `rc-keeper service install` already includes the Nix profile directories in its PATH. It finds `claude`, `git` and `gh` from your Nix profile.
+
+On first run, claude may ask a one-time question: `Enable Remote Control?`. rc-keeper does not answer it for you. Run `claude remote-control` once in a terminal, and answer `y`. claude does not ask again.
+
 ## Uninstall
 
 1. Remove the service: `rc-keeper service uninstall`.
