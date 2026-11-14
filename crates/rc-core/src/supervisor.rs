@@ -5,6 +5,7 @@ use crate::backoff::Backoff;
 use crate::log_buffer::LogBuffer;
 use crate::model::{InstanceConfig, InstanceStatus, State};
 use crate::network_wait::{self, SystemResolver};
+use crate::onboarding;
 use crate::parser::{Event, Parser};
 use crate::procs;
 use crate::takeover;
@@ -349,6 +350,11 @@ impl Session<'_> {
                 self.errored = true;
                 self.shared.live().status.last_error = Some(message);
             }
+            // Never answered: it is a consent question for a person. Starting stays until they answer.
+            Event::EnableRemoteControl => {
+                self.errored = true;
+                self.shared.live().status.last_error = Some(onboarding::ENABLE_MESSAGE.to_owned());
+            }
             Event::SessionUrl(url) => {
                 self.ready = true;
                 self.mark_running();
@@ -359,5 +365,34 @@ impl Session<'_> {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enable_prompt_sets_an_actionable_last_error_without_answering() {
+        let shared = Shared::new("folder");
+        // run_once sets Starting before it feeds output.
+        shared.live().status.state = State::Starting;
+        let mut session = Session {
+            shared: &shared,
+            auto_trust: true,
+            answer_at: None,
+            answered: false,
+            question_seen: false,
+            ready: false,
+            errored: false,
+        };
+        assert!(session.on_event(Event::EnableRemoteControl).is_none());
+        let live = shared.live();
+        assert_eq!(
+            live.status.last_error.as_deref(),
+            Some(onboarding::ENABLE_MESSAGE)
+        );
+        assert_eq!(live.status.state, State::Starting);
+        assert!(session.errored);
     }
 }

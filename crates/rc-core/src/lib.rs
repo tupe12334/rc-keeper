@@ -8,6 +8,7 @@ mod log_buffer;
 mod manager;
 mod model;
 mod network_wait;
+mod onboarding;
 mod parser;
 mod procs;
 mod supervisor;
