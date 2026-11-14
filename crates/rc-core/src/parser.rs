@@ -4,6 +4,8 @@ use std::io::{self, Write};
 use std::rc::Rc;
 use strip_ansi_escapes::Writer as AnsiStripper;
 
+use crate::onboarding::{self, ENABLE_PROMPT};
+
 const BUSY: &str = "already served by a terminal";
 const PROMPT: &str = "[y/N]";
 const TRUST_QUESTION: &str = "Quick safety check";
@@ -29,6 +31,8 @@ pub enum Event {
     TrustQuestion,
     /// A `[y/N]` that asks about trusting the folder.
     TrustPrompt,
+    /// claude's one-time "Enable Remote Control?" question. It is never answered here.
+    EnableRemoteControl,
     Error(String),
     SessionUrl(String),
 }
@@ -97,6 +101,9 @@ impl Parser {
         if self.partial.contains(TRUST_QUESTION) {
             events.push(Event::TrustQuestion);
         }
+        if self.partial.contains(ENABLE_PROMPT) {
+            events.push(Event::EnableRemoteControl);
+        }
         if self.partial.contains(PROMPT) {
             let line = std::mem::take(&mut self.partial);
             if self.is_trust_prompt(&line) {
@@ -150,9 +157,14 @@ impl Parser {
         if line.contains(PROMPT) && self.is_trust_prompt(line) {
             events.push(Event::TrustPrompt);
         }
+        if line.contains(ENABLE_PROMPT) {
+            events.push(Event::EnableRemoteControl);
+        }
         let trimmed = line.trim();
         let network = network_problem(line);
-        if let Some(problem) = network {
+        if let Some(problem) = onboarding::scope_problem(line) {
+            events.push(Event::Error(problem.to_owned()));
+        } else if let Some(problem) = network {
             events.push(Event::Error(format!(
                 "{problem}. Check the internet connection; rc-keeper retries by itself. ({trimmed})"
             )));
@@ -304,6 +316,30 @@ mod tests {
         assert!(errors[0].starts_with("No network: DNS lookup failed."));
         assert!(errors[0].contains("retries by itself"));
         assert!(errors[0].ends_with("(Error: getaddrinfo ENOTFOUND api.example)"));
+    }
+
+    #[test]
+    fn enable_prompt_split_across_chunks_is_seen() {
+        let mut parser = Parser::new();
+        let mut events = parser.feed(b"Enable Remote Co");
+        assert!(!events.contains(&Event::EnableRemoteControl));
+        events.extend(parser.feed(b"ntrol? (y/n) "));
+        assert!(events.contains(&Event::EnableRemoteControl));
+    }
+
+    #[test]
+    fn enable_prompt_exit_line_is_seen() {
+        let events = Parser::new()
+            .feed(b"Remote Control did not start: \"Enable Remote Control?\" got no answer.\n");
+        assert!(events.contains(&Event::EnableRemoteControl));
+    }
+
+    #[test]
+    fn scope_error_is_explained() {
+        let events = Parser::new().feed(
+            b"Error: Registration: Access denied (403): OAuth token does not meet scope requirement user:sessions:claude_code. Check your organization permissions.\n",
+        );
+        assert!(events.contains(&Event::Error(onboarding::SCOPE_MESSAGE.into())));
     }
 
     #[test]
