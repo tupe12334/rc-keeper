@@ -24,9 +24,21 @@ pub fn exec_start(exe: &Path) -> String {
     out
 }
 
+/// Extra PATH entries for the unit only. On NixOS, `claude`, git, gh and node live in
+/// Nix profiles, which are not on the systemd user manager's default PATH.
+/// Appended after the shared entries, so non-NixOS hosts see the same order as before.
+pub const NIX_PATH_TAIL: [&str; 5] = [
+    "/run/wrappers/bin",
+    "%h/.nix-profile/bin",
+    "/etc/profiles/per-user/%u/bin",
+    "/nix/var/nix/profiles/default/bin",
+    "/run/current-system/sw/bin",
+];
+
 pub fn unit_text(exe: &Path) -> String {
     let path = std::iter::once("%h/.local/bin")
         .chain(super::PATH_TAIL)
+        .chain(NIX_PATH_TAIL)
         .collect::<Vec<_>>()
         .join(":");
     format!(
@@ -134,7 +146,9 @@ mod tests {
     fn unit_sets_path_for_claude() {
         let text = unit_text(Path::new("/usr/local/bin/rc-keeper"));
         assert!(text.contains(
-            "Environment=PATH=%h/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin\n"
+            "Environment=PATH=%h/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\
+             /run/wrappers/bin:%h/.nix-profile/bin:/etc/profiles/per-user/%u/bin:\
+             /nix/var/nix/profiles/default/bin:/run/current-system/sw/bin\n"
         ));
     }
 
