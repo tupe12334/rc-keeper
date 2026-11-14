@@ -10,6 +10,15 @@ use tauri::{Manager as _, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 
 fn main() {
+    // Some Linux GPU drivers (e.g. nouveau) render a blank WebKit window with DMA-BUF.
+    // Set before WebKit starts. A value the user already set wins.
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             tray::show_main(app);
