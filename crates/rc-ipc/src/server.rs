@@ -6,11 +6,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 
-use anyhow::{Context, Result, bail};
-use interprocess::local_socket::{Listener, ListenerOptions, Stream, prelude::*};
-use rc_core::{Manager, Settings, find_claude_bin};
+use anyhow::{bail, Context, Result};
+use interprocess::local_socket::{prelude::*, Listener, ListenerOptions, Stream};
+use rc_core::{find_claude_bin, Manager, Settings};
 use serde::de::DeserializeOwned;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::client::{Client, ForeignDaemon};
 use crate::method::Method;

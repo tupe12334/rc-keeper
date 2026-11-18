@@ -1,8 +1,8 @@
 //! config get | set claude-bin `<path>` | set keep-awake on|off
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use rc_ipc::config_dir;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::connect;
 

@@ -311,7 +311,11 @@ pub fn run() -> i32 {
             Some(Exit(code)) => *code,
             None => {
                 eprintln!("error: {e:#}");
-                if e.is::<DaemonUnreachable>() { 2 } else { 1 }
+                if e.is::<DaemonUnreachable>() {
+                    2
+                } else {
+                    1
+                }
             }
         },
     }
