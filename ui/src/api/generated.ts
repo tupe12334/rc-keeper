@@ -143,6 +143,10 @@ export interface Settings {
    * Path to the `claude` binary. `null` means detect it.
    */
   claudeBin: string | null;
+  /**
+   * Keep the computer from sleeping while the daemon runs.
+   */
+  keepAwake: boolean;
 }
 /**
  * Params of `add_instance` and `update_instance`.
@@ -174,6 +178,11 @@ export interface TakeoverResult {
 export interface GetSettingsResult {
   autostart: null;
   claudeBin: string | null;
+  keepAwake: boolean;
+  /**
+   * True while the daemon holds the OS sleep block. False when `keepAwake` is on but the OS refused.
+   */
+  keepingAwake: boolean;
 }
 /**
  * Result of `ping`. `configDir` is the canonical config dir the daemon serves.
@@ -184,8 +193,10 @@ export interface PingResult {
   version: string;
 }
 /**
- * Params of `set_settings`. Absent or `null` clears the claude binary path.
+ * Params of `set_settings`. Absent or `null` `claudeBin` clears the claude binary path.
+ * Absent or `null` `keepAwake` keeps the current value.
  */
 export interface SetSettingsParams {
   claudeBin: string | null;
+  keepAwake: boolean | null;
 }

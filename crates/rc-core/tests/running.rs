@@ -56,6 +56,7 @@ fn running_manager(root: &Path) -> Manager {
     let m = Manager::load(root.join("config"));
     m.set_settings(Settings {
         claude_bin: Some(stand_in(root)),
+        ..Default::default()
     })
     .unwrap();
     m.add(InstanceConfig {

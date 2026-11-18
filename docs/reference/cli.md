@@ -281,7 +281,7 @@ Get or set settings
 ###### **Subcommands:**
 
 * `get` — Print all settings
-* `set` — Set a setting. The only key is `claude-bin`
+* `set` — Set a setting: `claude-bin` or `keep-awake`
 * `path` — Print the config dir (RC_KEEPER_CONFIG_DIR overrides it)
 
 
@@ -296,14 +296,14 @@ Print all settings
 
 ## `rc-keeper config set`
 
-Set a setting. The only key is `claude-bin`
+Set a setting: `claude-bin` or `keep-awake`
 
 **Usage:** `rc-keeper config set <KEY> <VALUE>`
 
 ###### **Arguments:**
 
-* `<KEY>` — Setting name. Must be `claude-bin`
-* `<VALUE>` — Path to the `claude` executable, e.g. `/usr/local/bin/claude`. Stored only on this machine in `settings.local.json`
+* `<KEY>` — Setting name: `claude-bin` or `keep-awake`
+* `<VALUE>` — For `claude-bin`: path to the `claude` executable, e.g. `/usr/local/bin/claude`. For `keep-awake`: `on` or `off`; `on` keeps the computer from sleeping while the daemon runs. Stored only on this machine in `settings.local.json`
 
 
 

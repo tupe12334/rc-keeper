@@ -41,6 +41,7 @@ export type FieldKey =
   | "forceBoot"
   | "settings.claudeBin"
   | "settings.autostart"
+  | "settings.keepAwake"
   | "settings.hideDock";
 
 export const FIELD_HELP: Record<FieldKey, FieldHelp> = {
@@ -135,6 +136,11 @@ export const FIELD_HELP: Record<FieldKey, FieldHelp> = {
   "settings.autostart": {
     title: "Launch at login",
     text: "Opens rc-keeper when you sign in to your computer.",
+    docUrl: RC_KEEPER_CONTRACT,
+  },
+  "settings.keepAwake": {
+    title: "Keep computer awake",
+    text: "Stops the computer from sleeping while the daemon runs, so Remote Control stays reachable. The display can still turn off. A closed laptop lid can still sleep the computer, and on macOS system sleep is blocked only on AC power.",
     docUrl: RC_KEEPER_CONTRACT,
   },
   "settings.hideDock": {

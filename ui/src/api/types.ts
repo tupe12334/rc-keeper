@@ -4,6 +4,8 @@ export type { InstanceConfig, InstanceStatus, InstanceView, State, TakeoverResul
 /** Result of the GUI command `get_settings`. Not an IPC type: the GUI owns autostart. */
 export interface UiSettings {
   claudeBin: string | null;
+  /** Daemon setting: keep the computer from sleeping while the daemon runs. */
+  keepAwake: boolean;
   autostart: boolean;
   /** macOS only: hide the Dock icon, keep the menu bar icon. */
   hideDock: boolean;

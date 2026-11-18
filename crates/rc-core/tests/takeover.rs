@@ -83,6 +83,7 @@ fn setup(name: &str) -> Env {
     manager
         .set_settings(Settings {
             claude_bin: Some(claude.clone()),
+            ..Default::default()
         })
         .unwrap();
     Env {

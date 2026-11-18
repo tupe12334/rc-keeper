@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tauri::{AppHandle, State};
 
 use crate::daemon::{self, Daemon};
@@ -81,6 +81,7 @@ pub async fn set_settings(
     app: AppHandle,
     daemon: State<'_, Daemon>,
     claude_bin: Option<PathBuf>,
+    keep_awake: bool,
     autostart: bool,
     hide_dock: bool,
 ) -> Result<(), String> {
@@ -89,6 +90,7 @@ pub async fn set_settings(
         &daemon,
         SettingsDto {
             claude_bin,
+            keep_awake,
             autostart,
             hide_dock,
         },

@@ -12,6 +12,8 @@ use crate::daemon::{self, Daemon};
 #[serde(rename_all = "camelCase")]
 pub struct SettingsDto {
     pub claude_bin: Option<PathBuf>,
+    /// Daemon setting: keep the computer from sleeping while the daemon runs.
+    pub keep_awake: bool,
     pub autostart: bool,
     /// macOS only: hide the Dock icon and keep only the menu bar icon.
     pub hide_dock: bool,
@@ -71,6 +73,7 @@ pub fn get(app: &AppHandle, daemon: &Daemon) -> Result<SettingsDto, String> {
     Ok(SettingsDto {
         claude_bin: serde_json::from_value(settings["claudeBin"].clone())
             .map_err(|e| e.to_string())?,
+        keep_awake: settings["keepAwake"].as_bool().unwrap_or(false),
         autostart: app.autolaunch().is_enabled().map_err(|e| e.to_string())?,
         hide_dock: load_prefs(app).hide_dock,
     })
@@ -95,7 +98,7 @@ pub fn set(app: &AppHandle, daemon: &Daemon, dto: SettingsDto) -> Result<(), Str
     daemon::call(
         daemon,
         "set_settings",
-        json!({ "claudeBin": dto.claude_bin }),
+        json!({ "claudeBin": dto.claude_bin, "keepAwake": dto.keep_awake }),
     )?;
     Ok(())
 }

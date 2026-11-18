@@ -26,6 +26,13 @@ pub struct InstanceConfig {
 pub struct Settings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claude_bin: Option<PathBuf>,
+    /// Keep the computer from sleeping while the daemon runs. Written only when true.
+    #[serde(skip_serializing_if = "is_false")]
+    pub keep_awake: bool,
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
