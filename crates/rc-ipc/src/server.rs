@@ -287,13 +287,25 @@ fn dispatch(manager: &Manager, method: &str, params: &Value) -> Result<Value, St
             Ok(Value::Null)
         }
         // ponytail: GUI owns login autostart, so the daemon reports null for it.
-        Method::GetSettings => to_value(GetSettingsResult {
-            claude_bin: manager.settings().claude_bin,
-            autostart: (),
-        }),
+        Method::GetSettings => {
+            let settings = manager.settings();
+            to_value(GetSettingsResult {
+                claude_bin: settings.claude_bin,
+                keep_awake: settings.keep_awake,
+                keeping_awake: manager.keeping_awake(),
+                autostart: (),
+            })
+        }
         Method::SetSettings => {
-            let SetSettingsParams { claude_bin } = parse(params)?;
-            unit(manager.set_settings(Settings { claude_bin }))
+            let SetSettingsParams {
+                claude_bin,
+                keep_awake,
+            } = parse(params)?;
+            let keep_awake = keep_awake.unwrap_or(manager.settings().keep_awake);
+            unit(manager.set_settings(Settings {
+                claude_bin,
+                keep_awake,
+            }))
         }
         Method::DetectClaudeBin => to_value(find_claude_bin(&manager.settings())),
         Method::ForceStart => {

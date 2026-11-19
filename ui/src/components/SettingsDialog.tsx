@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 const isMac = () => navigator.userAgent.includes("Mac");
 
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const [settings, setSettings] = useState<UiSettings>({ claudeBin: null, autostart: false, hideDock: false });
+  const [settings, setSettings] = useState<UiSettings>({ claudeBin: null, keepAwake: false, autostart: false, hideDock: false });
   const [bin, setBin] = useState("");
   const [daemon, setDaemon] = useState<DaemonInfo | null>(null);
 
@@ -47,7 +47,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   async function save() {
     try {
-      await api.setSettings({ claudeBin: bin.trim() === "" ? null : bin.trim(), autostart: settings.autostart, hideDock: settings.hideDock });
+      await api.setSettings({ claudeBin: bin.trim() === "" ? null : bin.trim(), keepAwake: settings.keepAwake, autostart: settings.autostart, hideDock: settings.hideDock });
       toast.success("Settings saved");
       onClose();
     } catch (e) {
@@ -97,6 +97,16 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <FieldHelp field="settings.autostart" />
             </div>
             <Switch id="s-autostart" checked={settings.autostart} onCheckedChange={(v) => setSettings((s) => ({ ...s, autostart: v }))} />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="s-keep-awake" className="text-sm font-medium">
+                Keep computer awake
+              </label>
+              <FieldHelp field="settings.keepAwake" />
+            </div>
+            <Switch id="s-keep-awake" checked={settings.keepAwake} onCheckedChange={(v) => setSettings((s) => ({ ...s, keepAwake: v }))} />
           </div>
 
           {isMac() && (

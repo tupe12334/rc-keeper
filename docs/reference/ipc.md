@@ -52,6 +52,8 @@ Result of `get_settings`. `autostart` is always `null`: the GUI owns login autos
 |---|---|---|---|
 | `autostart` | null | yes |  |
 | `claudeBin` | string \| null | yes |  |
+| `keepAwake` | boolean | yes |  |
+| `keepingAwake` | boolean | yes | True while the daemon holds the OS sleep block. False when `keepAwake` is on but the OS refused. |
 
 ### IdParams
 
@@ -114,11 +116,12 @@ Result of `ping`. `configDir` is the canonical config dir the daemon serves.
 
 ### SetSettingsParams
 
-Params of `set_settings`. Absent or `null` clears the claude binary path.
+Params of `set_settings`. Absent or `null` `claudeBin` clears the claude binary path. Absent or `null` `keepAwake` keeps the current value.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `claudeBin` | string \| null | yes |  |
+| `keepAwake` | boolean \| null | yes |  |
 
 ### Settings
 
@@ -127,6 +130,7 @@ Daemon settings. Shared by all instances.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `claudeBin` | string \| null | yes | Path to the `claude` binary. `null` means detect it. |
+| `keepAwake` | boolean | yes | Keep the computer from sleeping while the daemon runs. |
 
 ### State
 

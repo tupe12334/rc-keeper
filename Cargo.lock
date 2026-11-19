@@ -749,6 +749,7 @@ dependencies = [
  "strip-ansi-escapes",
  "sysinfo",
  "which",
+ "windows-sys",
 ]
 
 [[package]]

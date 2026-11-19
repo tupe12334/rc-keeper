@@ -99,6 +99,20 @@ Fix: turn Power Nap off.
 sudo pmset -a powernap 0
 ```
 
+## Keep the computer awake
+
+rc-keeper can block sleep while its daemon runs:
+
+```sh
+rc-keeper config set keep-awake on
+```
+
+The GUI has the same switch: Settings → Keep computer awake. The daemon runs `caffeinate -ims -w <daemon pid>`. This stops idle sleep, and stops system sleep while on AC power. A closed lid on battery still sleeps the Mac. For a Mac that must never sleep, also run:
+
+```sh
+sudo pmset -a sleep 0 disablesleep 1 powernap 0
+```
+
 Passing `--continue` is not a fix by default. It puts rc in single-session mode. Use `rc-keeper add DIR -- --continue` only if one session is enough.
 
 ## Related

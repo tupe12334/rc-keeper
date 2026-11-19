@@ -41,6 +41,8 @@ pub struct InstanceConfig {
 pub struct Settings {
     /// Path to the `claude` binary. `null` means detect it.
     pub claude_bin: Option<PathBuf>,
+    /// Keep the computer from sleeping while the daemon runs.
+    pub keep_awake: bool,
 }
 
 #[derive(Default, JsonSchema)]
@@ -118,8 +120,14 @@ fn check_instance_config(v: rc_core::InstanceConfig) -> InstanceConfig {
 
 #[allow(dead_code)]
 fn check_settings(v: rc_core::Settings) -> Settings {
-    let rc_core::Settings { claude_bin } = v;
-    Settings { claude_bin }
+    let rc_core::Settings {
+        claude_bin,
+        keep_awake,
+    } = v;
+    Settings {
+        claude_bin,
+        keep_awake,
+    }
 }
 
 #[allow(dead_code)]
@@ -204,11 +212,13 @@ pub struct CfgParams {
     pub cfg: rc_core::InstanceConfig,
 }
 
-/// Params of `set_settings`. Absent or `null` clears the claude binary path.
+/// Params of `set_settings`. Absent or `null` `claudeBin` clears the claude binary path.
+/// Absent or `null` `keepAwake` keeps the current value.
 #[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SetSettingsParams {
     pub claude_bin: Option<PathBuf>,
+    pub keep_awake: Option<bool>,
 }
 
 /// Result of `ping`. `configDir` is the canonical config dir the daemon serves.
@@ -225,5 +235,8 @@ pub struct PingResult {
 #[serde(rename_all = "camelCase")]
 pub struct GetSettingsResult {
     pub claude_bin: Option<PathBuf>,
+    pub keep_awake: bool,
+    /// True while the daemon holds the OS sleep block. False when `keepAwake` is on but the OS refused.
+    pub keeping_awake: bool,
     pub autostart: (),
 }

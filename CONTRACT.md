@@ -39,7 +39,7 @@ The config dir can be a git repo (dotfiles), shared across machines. Rules:
 - **Only diffable text is tracked.** Layout in `<config_dir>`:
   - `settings.json` — shared settings (portable values only).
   - `instances/<id>.json` — one file per instance, so adding or editing one instance never touches another's file.
-  - `settings.local.json` — machine-specific values (`claudeBin`); never shared.
+  - `settings.local.json` — machine-specific values (`claudeBin`, `keepAwake`); never shared. `keepAwake: true` makes the daemon block OS sleep while it runs (macOS `caffeinate -ims -w <pid>`, Linux `systemd-inhibit`, Windows `SetThreadExecutionState`).
   - runtime (never tracked): `status.json`, `daemon.log`, `rc-keeper.sock`, `*.tmp`.
   - The daemon writes `<config_dir>/.gitignore` (if missing) listing the local + runtime files.
 - **Deterministic bytes:** pretty JSON, 2-space indent, `\n` line endings, trailing newline, fixed key order = struct declaration order (`id`, `name`, `folder`, then the rest A–Z); `null`/unset optional fields omitted; `extraArgs` kept in user order. Re-saving unchanged config produces identical bytes (no timestamps, no runtime state in config).

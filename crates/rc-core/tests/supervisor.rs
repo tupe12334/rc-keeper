@@ -22,6 +22,7 @@ fn setup(name: &str) -> (Manager, PathBuf) {
     manager
         .set_settings(Settings {
             claude_bin: Some(fake_claude()),
+            ..Default::default()
         })
         .unwrap();
     (manager, folder)

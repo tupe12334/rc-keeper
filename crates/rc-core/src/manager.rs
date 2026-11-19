@@ -1,5 +1,6 @@
 //! Public entry point. Owns the instance registry, the supervisor threads and status.json.
 use crate::config::{self, Loaded};
+use crate::keep_awake::KeepAwake;
 use crate::locate::find_claude_bin;
 use crate::model::{AppConfig, InstanceConfig, InstanceStatus, InstanceView, Settings, State};
 use crate::procs;
@@ -26,6 +27,7 @@ struct Inner {
     dir: PathBuf,
     home: Option<PathBuf>,
     reg: Mutex<Registry>,
+    awake: Mutex<KeepAwake>,
 }
 
 #[derive(Default)]
@@ -66,8 +68,10 @@ impl Manager {
                     broken,
                     runs,
                 }),
+                awake: Mutex::new(KeepAwake::default()),
             }),
         };
+        let _ = manager.apply_keep_awake();
         let weak = Arc::downgrade(&manager.inner);
         let alive = weak.clone();
         thread::spawn(move || tick(weak));
@@ -299,7 +303,27 @@ impl Manager {
         let mut reg = self.reg();
         config::save_settings(&self.inner.dir, &settings)?;
         reg.config.settings = settings;
-        Ok(())
+        drop(reg);
+        self.apply_keep_awake()
+    }
+
+    /// True while the daemon holds the OS sleep block.
+    pub fn keeping_awake(&self) -> bool {
+        self.awake().is_active()
+    }
+
+    /// Takes or releases the sleep block to match `settings.keep_awake`.
+    fn apply_keep_awake(&self) -> Result<(), String> {
+        let want = self.reg().config.settings.keep_awake;
+        let result = self.awake().set(want);
+        if let Err(e) = &result {
+            eprintln!("rc-core: {e}");
+        }
+        result
+    }
+
+    fn awake(&self) -> MutexGuard<'_, KeepAwake> {
+        self.inner.awake.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn start_all(&self) {
@@ -317,6 +341,7 @@ impl Manager {
     /// Stops every instance and waits for all children to exit.
     pub fn shutdown(&self) {
         self.stop_all();
+        let _ = self.awake().set(false);
     }
 
     fn reg(&self) -> MutexGuard<'_, Registry> {
@@ -388,6 +413,7 @@ impl Manager {
         for id in &to_start {
             let _ = self.start(id);
         }
+        let _ = self.apply_keep_awake();
     }
 
     fn folder_of(&self, id: &str) -> Result<PathBuf, String> {

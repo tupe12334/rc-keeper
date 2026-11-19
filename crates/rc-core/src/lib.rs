@@ -3,6 +3,7 @@ mod args;
 mod backoff;
 mod config;
 mod foreign;
+mod keep_awake;
 mod locate;
 mod log_buffer;
 mod manager;

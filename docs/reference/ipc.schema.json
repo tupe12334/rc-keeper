@@ -25,10 +25,19 @@
             "string",
             "null"
           ]
+        },
+        "keepAwake": {
+          "type": "boolean"
+        },
+        "keepingAwake": {
+          "description": "True while the daemon holds the OS sleep block. False when `keepAwake` is on but the OS refused.",
+          "type": "boolean"
         }
       },
       "required": [
         "claudeBin",
+        "keepAwake",
+        "keepingAwake",
         "autostart"
       ],
       "type": "object"
@@ -253,7 +262,7 @@
       "type": "object"
     },
     "SetSettingsParams": {
-      "description": "Params of `set_settings`. Absent or `null` clears the claude binary path.",
+      "description": "Params of `set_settings`. Absent or `null` `claudeBin` clears the claude binary path.\nAbsent or `null` `keepAwake` keeps the current value.",
       "properties": {
         "claudeBin": {
           "default": null,
@@ -261,10 +270,18 @@
             "string",
             "null"
           ]
+        },
+        "keepAwake": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "required": [
-        "claudeBin"
+        "claudeBin",
+        "keepAwake"
       ],
       "type": "object"
     },
@@ -278,10 +295,16 @@
             "string",
             "null"
           ]
+        },
+        "keepAwake": {
+          "default": false,
+          "description": "Keep the computer from sleeping while the daemon runs.",
+          "type": "boolean"
         }
       },
       "required": [
-        "claudeBin"
+        "claudeBin",
+        "keepAwake"
       ],
       "type": "object"
     },

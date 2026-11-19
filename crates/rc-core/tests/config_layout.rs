@@ -41,6 +41,7 @@ fn golden_instance_and_settings_bytes() {
     let m = Manager::load(dir.clone());
     m.set_settings(Settings {
         claude_bin: Some("/opt/claude/bin/claude".into()),
+        ..Default::default()
     })
     .unwrap();
     let id = m

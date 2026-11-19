@@ -38,6 +38,7 @@ fn edit_after_commit_shows_one_modified_file() {
     let m = Manager::load(dir.clone());
     m.set_settings(Settings {
         claude_bin: Some("/opt/claude".into()),
+        ..Default::default()
     })
     .unwrap();
     for folder in ["/srv/projects/one", "/srv/projects/two"] {
