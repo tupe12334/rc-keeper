@@ -7,3 +7,8 @@ members = ["crates/*", "xtask"]
 # wasted allocation and the original can be moved instead. CI runs clippy
 # with `-D warnings`, so `warn` is enforced there.
 redundant_clone = "warn"
+# Flag closures that only forward their argument to one of its own methods:
+# a method path (`ToString::to_string`) says the same thing with less syntax
+# and cannot silently drift. CI runs clippy with `-D warnings`, so `warn` is
+# enforced there.
+redundant_closure_for_method_calls = "warn"

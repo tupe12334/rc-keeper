@@ -31,7 +31,7 @@ fn instance(folder: &Path, auto_trust: bool, extra_args: &[&str]) -> InstanceCon
     InstanceConfig {
         folder: folder.to_path_buf(),
         auto_trust,
-        extra_args: extra_args.iter().map(|s| s.to_string()).collect(),
+        extra_args: extra_args.iter().map(ToString::to_string).collect(),
         ..Default::default()
     }
 }

@@ -53,7 +53,7 @@ mod tests {
     use super::new_lines;
 
     fn v(xs: &[&str]) -> Vec<String> {
-        xs.iter().map(|s| s.to_string()).collect()
+        xs.iter().map(ToString::to_string).collect()
     }
 
     #[test]

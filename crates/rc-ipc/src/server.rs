@@ -3,7 +3,7 @@
 use std::io::{self, BufRead, BufReader, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(unix)]
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, PoisonError};
 use std::thread;
 
 use anyhow::{bail, Context, Result};
@@ -106,7 +106,10 @@ fn lock_runtime_dir() -> Result<()> {
     if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
         bail!("rc-keeper daemon is already running");
     }
-    LOCKS.lock().unwrap_or_else(|e| e.into_inner()).push(file);
+    LOCKS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(file);
     Ok(())
 }
 

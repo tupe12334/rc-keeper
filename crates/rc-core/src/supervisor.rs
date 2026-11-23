@@ -12,7 +12,7 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, mpsc};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -47,11 +47,13 @@ impl Shared {
     }
 
     pub fn lifecycle(&self) -> MutexGuard<'_, ()> {
-        self.lifecycle.lock().unwrap_or_else(|e| e.into_inner())
+        self.lifecycle
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
     pub fn live(&self) -> MutexGuard<'_, Live> {
-        self.live.lock().unwrap_or_else(|e| e.into_inner())
+        self.live.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
