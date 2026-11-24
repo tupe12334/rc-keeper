@@ -89,13 +89,15 @@ pub fn create_args(xml: &Path) -> Vec<String> {
 
 pub fn install(dry_run: bool) -> Result<()> {
     let path = xml_path();
-    write_task_file(&path, &task_xml(&exe()?))?;
-    println!("wrote {}", path.display());
+    let text = task_xml(&exe()?);
     let args = create_args(&path);
     if dry_run {
+        super::print_dry_run(&path, &text);
         println!("dry run: schtasks {}", args.join(" "));
         return Ok(());
     }
+    write_task_file(&path, &text)?;
+    println!("wrote {}", path.display());
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     run_cmd("schtasks", &refs)?;
     run_cmd("schtasks", &["/Run", "/TN", TASK])

@@ -51,6 +51,20 @@ pub fn write_file(path: &Path, text: &str) -> Result<()> {
     std::fs::write(path, text).with_context(|| format!("cannot write {}", path.display()))
 }
 
+/// Dry run: print the service file and its path. Write nothing.
+pub fn print_dry_run(path: &Path, text: &str) {
+    println!("dry run: would write {}\n{text}", path.display());
+}
+
+/// Dry run: say what uninstall would remove. Remove nothing.
+pub fn print_dry_run_remove(path: &Path) {
+    if path.exists() {
+        println!("dry run: would remove {}", path.display());
+    } else {
+        println!("not installed");
+    }
+}
+
 pub fn print_daemon_state() {
     match live_client().map(|mut c| c.ping()) {
         Some(Ok(info)) => println!(

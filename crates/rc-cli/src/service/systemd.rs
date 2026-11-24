@@ -44,11 +44,12 @@ fn unit_path() -> Result<PathBuf> {
 
 pub fn install(dry_run: bool) -> Result<()> {
     let path = unit_path()?;
-    write_file(&path, &unit_text(&exe()?))?;
-    println!("wrote {}", path.display());
+    let text = unit_text(&exe()?);
     if dry_run {
-        println!("dry run: skipped systemctl");
+        super::print_dry_run(&path, &text);
     } else {
+        write_file(&path, &text)?;
+        println!("wrote {}", path.display());
         if let Err(e) = run_cmd("systemctl", &["--user", "daemon-reload"]) {
             if is_not_found(&e) {
                 bail!(
@@ -77,20 +78,19 @@ fn is_not_found(e: &anyhow::Error) -> bool {
 
 pub fn uninstall(dry_run: bool) -> Result<()> {
     let path = unit_path()?;
-    if !dry_run {
-        // ponytail: disable fails when the unit is absent. Ignore that.
-        let _ = run_cmd("systemctl", &["--user", "disable", "--now", UNIT_FILE]);
+    if dry_run {
+        super::print_dry_run_remove(&path);
+        return Ok(());
     }
+    // ponytail: disable fails when the unit is absent. Ignore that.
+    let _ = run_cmd("systemctl", &["--user", "disable", "--now", UNIT_FILE]);
     if path.exists() {
         std::fs::remove_file(&path)?;
         println!("removed {}", path.display());
     } else {
         println!("not installed");
     }
-    if !dry_run {
-        run_cmd("systemctl", &["--user", "daemon-reload"])?;
-    }
-    Ok(())
+    run_cmd("systemctl", &["--user", "daemon-reload"])
 }
 
 pub fn status() -> Result<()> {

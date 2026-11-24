@@ -147,13 +147,13 @@ pub enum ConfigCmd {
 pub enum ServiceCmd {
     /// Write the service file and enable it
     Install {
-        /// Write the service file only. Skip systemctl, launchctl and schtasks.
+        /// Print the service file and its path. Write nothing and skip systemctl, launchctl and schtasks.
         #[arg(long)]
         dry_run: bool,
     },
     /// Disable the service and remove its file
     Uninstall {
-        /// Remove the service file only. Skip systemctl, launchctl and schtasks.
+        /// Print the service file path to remove. Remove nothing and skip systemctl, launchctl and schtasks.
         #[arg(long)]
         dry_run: bool,
     },
