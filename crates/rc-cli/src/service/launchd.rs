@@ -73,15 +73,14 @@ fn uid() -> Result<String> {
 pub fn install(dry_run: bool) -> Result<()> {
     let path = plist_path()?;
     let home = dirs::home_dir().context("no home directory")?;
-    write_file(
-        &path,
-        &plist_text(&exe()?, &config_dir().join("daemon.log"), &home),
-    )?;
-    println!("wrote {}", path.display());
+    let text = plist_text(&exe()?, &config_dir().join("daemon.log"), &home);
+    // launchd loads every plist in LaunchAgents at login, so a dry run writes nothing.
     if dry_run {
-        println!("dry run: skipped launchctl");
+        super::print_dry_run(&path, &text);
         return Ok(());
     }
+    write_file(&path, &text)?;
+    println!("wrote {}", path.display());
     let uid = uid()?;
     // ponytail: bootout fails when not loaded. Ignore, so reinstall works.
     let _ = run_cmd("launchctl", &["bootout", &format!("gui/{uid}/{LABEL}")]);
@@ -93,11 +92,13 @@ pub fn install(dry_run: bool) -> Result<()> {
 
 pub fn uninstall(dry_run: bool) -> Result<()> {
     let path = plist_path()?;
-    if !dry_run {
-        let uid = uid()?;
-        // ponytail: bootout fails when not loaded. Ignore.
-        let _ = run_cmd("launchctl", &["bootout", &format!("gui/{uid}/{LABEL}")]);
+    if dry_run {
+        super::print_dry_run_remove(&path);
+        return Ok(());
     }
+    let uid = uid()?;
+    // ponytail: bootout fails when not loaded. Ignore.
+    let _ = run_cmd("launchctl", &["bootout", &format!("gui/{uid}/{LABEL}")]);
     if path.exists() {
         std::fs::remove_file(&path)?;
         println!("removed {}", path.display());

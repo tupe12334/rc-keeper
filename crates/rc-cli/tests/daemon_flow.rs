@@ -219,16 +219,19 @@ fn daemon_lifecycle_through_cli() {
 
     eprintln!("step: service install/uninstall --dry-run in temp dir");
     let services = root.join("services");
-    rk(&root)
+    let out = rk(&root)
         .args(["service", "install", "--dry-run"])
         .assert()
         .success();
-    assert_eq!(std::fs::read_dir(&services).unwrap().count(), 1);
+    let out = String::from_utf8_lossy(&out.get_output().stdout).to_string();
+    assert!(out.contains("dry run: would write"), "got: {out}");
+    assert!(out.contains("daemon"), "got: {out}");
+    assert!(!services.exists(), "dry run must write nothing");
     rk(&root)
         .args(["service", "uninstall", "--dry-run"])
         .assert()
         .success();
-    assert_eq!(std::fs::read_dir(&services).unwrap().count(), 0);
+    assert!(!services.exists(), "dry run must write nothing");
 
     let _ = std::fs::remove_dir_all(&root);
 }

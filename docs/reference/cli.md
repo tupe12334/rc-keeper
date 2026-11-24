@@ -337,7 +337,7 @@ Write the service file and enable it
 
 ###### **Options:**
 
-* `--dry-run` — Write the service file only. Skip systemctl, launchctl and schtasks
+* `--dry-run` — Print the service file and its path. Write nothing and skip systemctl, launchctl and schtasks
 
 
 
@@ -349,7 +349,7 @@ Disable the service and remove its file
 
 ###### **Options:**
 
-* `--dry-run` — Remove the service file only. Skip systemctl, launchctl and schtasks
+* `--dry-run` — Print the service file path to remove. Remove nothing and skip systemctl, launchctl and schtasks
 
 
 
